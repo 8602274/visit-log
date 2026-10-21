@@ -6,6 +6,11 @@
 <meta name="theme-color" content="#0f766e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="방문기록">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>나의 방문기록</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -196,8 +201,13 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
       </select>
     </div>
     <div class="panel">
-      <h3>휴대폰 홈 화면에 추가</h3>
-      <p class="hint">크롬: 메뉴(⋮) → <b>홈 화면에 추가</b><br>사파리: 공유 버튼 → <b>홈 화면에 추가</b></p>
+      <h3>앱으로 설치</h3>
+      <button class="btn primary block" id="btnInstall" style="display:none;margin-bottom:10px">📲 이 기기에 앱 설치</button>
+      <p class="hint" id="installHint">크롬: 메뉴(⋮) → <b>앱 설치</b> 또는 <b>홈 화면에 추가</b><br>삼성 인터넷: 메뉴(☰) → <b>현재 페이지 추가</b> → <b>홈 화면</b><br>사파리: 공유 버튼 → <b>홈 화면에 추가</b></p>
+    </div>
+    <div class="panel">
+      <h3>앱 정보</h3>
+      <p class="hint" id="appInfo">나의 방문기록 v1.0.0</p>
     </div>
   </section>
 </main>
@@ -706,6 +716,29 @@ $('#importFile').addEventListener('change', async e => {
 /* ---------- 시작 ---------- */
 renderAll();
 DB.open().then(reload);
+
+/* ---------- 설치·오프라인 ---------- */
+const APP_VERSION = 'v1.0.0';
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+let installEvt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('#btnInstall').style.display = ''; });
+$('#btnInstall').addEventListener('click', async () => {
+  if (!installEvt) return;
+  installEvt.prompt(); await installEvt.userChoice; installEvt = null; $('#btnInstall').style.display = 'none';
+});
+window.addEventListener('appinstalled', () => toast('앱을 설치했습니다'));
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+// 브라우저가 공간 정리할 때 기록이 지워지지 않도록 요청
+(async () => {
+  let persisted = false;
+  try { persisted = await navigator.storage?.persisted?.() || (standalone && await navigator.storage?.persist?.()); } catch {}
+  let used = '';
+  try { const est = await navigator.storage?.estimate?.(); if (est?.usage) used = ` · 사용 용량 ${(est.usage/1048576).toFixed(1)}MB`; } catch {}
+  $('#appInfo').innerHTML = `나의 방문기록 ${APP_VERSION}${standalone ? ' · 앱으로 실행 중' : ''}<br>기록 보호: ${persisted ? '켜짐 (자동 삭제 안 됨)' : '꺼짐 — 앱으로 설치하면 켜집니다'}${used}`;
+  if (standalone) $('#installHint').textContent = '이미 앱으로 설치되어 실행 중입니다.';
+})();
 </script>
 </body>
 </html>
