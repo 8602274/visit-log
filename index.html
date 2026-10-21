@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>나의 방문기록</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{
+  --bg:#f4f6f5; --card:#ffffff; --text:#1c2421; --sub:#66736e; --line:#e2e7e5;
+  --accent:#0f766e; --accent-soft:#d9efec; --star:#f59e0b; --danger:#c2410c;
+  --shadow:0 1px 3px rgba(0,0,0,.08);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121715; --card:#1c2320; --text:#e8eeeb; --sub:#93a19b; --line:#2c3632;
+    --accent:#2dd4bf; --accent-soft:#163a35; --star:#fbbf24; --danger:#fb923c;
+    --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121715; --card:#1c2320; --text:#e8eeeb; --sub:#93a19b; --line:#2c3632;
+  --accent:#2dd4bf; --accent-soft:#163a35; --star:#fbbf24; --danger:#fb923c;
+  --shadow:none;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;font-size:16px}
+body{padding-bottom:calc(72px + env(safe-area-inset-bottom))}
+header{position:sticky;top:0;z-index:20;background:var(--bg);padding:14px 16px 8px;
+  display:flex;align-items:center;justify-content:space-between}
+header h1{font-size:20px;margin:0}
+header .count{color:var(--sub);font-size:14px}
+main{max-width:720px;margin:0 auto;padding:0 16px}
+.tab{display:none}.tab.on{display:block}
+
+/* 검색·필터 */
+.tools{display:flex;gap:8px;margin-bottom:10px}
+.tools input,.tools select{flex:1;min-width:0}
+input,select,textarea{font:inherit;color:var(--text);background:var(--card);border:1px solid var(--line);
+  border-radius:10px;padding:10px 12px;width:100%}
+textarea{min-height:90px;resize:vertical}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:6px;scrollbar-width:none}
+.chip{flex:none;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:999px;
+  padding:6px 12px;font-size:14px;cursor:pointer}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* 목록 카드 */
+.month{font-size:13px;color:var(--sub);margin:14px 2px 6px;font-weight:600}
+.item{display:flex;gap:12px;background:var(--card);border-radius:14px;padding:12px;margin-bottom:8px;
+  box-shadow:var(--shadow);cursor:pointer;align-items:center}
+.thumb{width:64px;height:64px;border-radius:10px;flex:none;background:var(--accent-soft);
+  display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.info{min-width:0;flex:1}
+.info .name{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.info .meta{font-size:13px;color:var(--sub);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stars{color:var(--star);letter-spacing:1px;font-size:14px}
+.badge{display:inline-block;font-size:11px;background:var(--accent-soft);color:var(--accent);
+  border-radius:6px;padding:1px 6px;margin-left:4px;font-weight:600;vertical-align:1px}
+.empty{text-align:center;color:var(--sub);padding:60px 10px;line-height:1.7}
+
+/* 지도 */
+#bigMap{height:calc(100vh - 170px);border-radius:14px;overflow:hidden}
+.leaflet-popup-content{font-family:inherit}
+
+/* 통계 */
+.statGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.stat{background:var(--card);border-radius:14px;padding:14px 10px;text-align:center;box-shadow:var(--shadow)}
+.stat b{display:block;font-size:24px;color:var(--accent)}
+.stat span{font-size:12px;color:var(--sub)}
+.panel{background:var(--card);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:var(--shadow)}
+.panel h3{margin:0 0 10px;font-size:15px}
+.bar{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:14px}
+.bar .lab{width:84px;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .track{flex:1;height:10px;background:var(--accent-soft);border-radius:5px;overflow:hidden}
+.bar .fill{height:100%;background:var(--accent);border-radius:5px}
+.bar .n{width:30px;text-align:right;color:var(--sub)}
+.btn{display:inline-block;border:0;border-radius:10px;padding:11px 14px;font:inherit;font-weight:600;cursor:pointer;
+  background:var(--accent-soft);color:var(--accent)}
+.btn.primary{background:var(--accent);color:#fff}
+.btn.danger{background:transparent;color:var(--danger);border:1px solid var(--danger)}
+.btn.block{width:100%}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.hint{font-size:13px;color:var(--sub);line-height:1.6}
+
+/* 하단 탭바 */
+nav{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--card);border-top:1px solid var(--line);
+  display:flex;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;background:none;color:var(--sub);font:inherit;font-size:12px;padding:8px 0 10px;cursor:pointer}
+nav button i{display:block;font-style:normal;font-size:20px}
+nav button.on{color:var(--accent);font-weight:700}
+.fab{position:fixed;right:18px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:31;width:58px;height:58px;
+  border-radius:50%;border:0;background:var(--accent);color:#fff;font-size:30px;box-shadow:0 4px 12px rgba(0,0,0,.25);cursor:pointer}
+
+/* 시트(모달) */
+.sheet{position:fixed;inset:0;z-index:50;background:var(--bg);overflow-y:auto;display:none}
+.sheet.on{display:block}
+.sheet .top{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;align-items:center;
+  justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
+.sheet .top h2{font-size:17px;margin:0}
+.sheet .top button{border:0;background:none;color:var(--accent);font:inherit;font-weight:700;padding:6px;cursor:pointer}
+.sheet .body{max-width:720px;margin:0 auto;padding:16px}
+label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-weight:600}
+.rate{display:flex;gap:4px}
+.rate button{border:0;background:none;font-size:32px;color:var(--line);cursor:pointer;padding:0 2px}
+.rate button.on{color:var(--star)}
+#pickMap{height:220px;border-radius:12px;margin-top:8px;overflow:hidden}
+.photos{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}
+.photos .ph{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--accent-soft)}
+.photos .ph img{width:100%;height:100%;object-fit:cover}
+.photos .ph button{position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:50%;border:0;
+  background:rgba(0,0,0,.6);color:#fff;font-size:13px;line-height:22px;padding:0;cursor:pointer}
+.addPh{aspect-ratio:1;border:2px dashed var(--line);border-radius:8px;display:flex;align-items:center;
+  justify-content:center;font-size:26px;color:var(--sub);cursor:pointer}
+.toggle{display:flex;align-items:center;gap:10px;margin-top:14px;font-size:15px}
+.toggle input{width:20px;height:20px}
+
+/* 상세 */
+.gallery{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;margin:-16px -16px 14px;padding:0}
+.gallery img{flex:none;width:100%;max-height:60vh;object-fit:cover;scroll-snap-align:start}
+.dName{font-size:22px;font-weight:800;margin:0 0 6px}
+.dMeta{color:var(--sub);font-size:14px;line-height:1.7}
+.memo{white-space:pre-wrap;line-height:1.7;margin:14px 0;background:var(--card);border-radius:12px;padding:14px}
+.history{font-size:14px;line-height:1.9}
+.history a{color:var(--accent);cursor:pointer;text-decoration:none}
+#dMap{height:180px;border-radius:12px;overflow:hidden;margin:12px 0}
+.toast{position:fixed;left:50%;bottom:150px;transform:translateX(-50%);background:#222;color:#fff;
+  padding:10px 16px;border-radius:10px;font-size:14px;z-index:99;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:.92}
+#viewer{position:fixed;inset:0;z-index:80;background:#000;display:none;align-items:center;justify-content:center}
+#viewer.on{display:flex}
+#viewer img{max-width:100%;max-height:100%}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📍 나의 방문기록</h1>
+  <span class="count" id="countTxt"></span>
+</header>
+
+<main>
+  <!-- 목록 -->
+  <section class="tab on" id="tab-list">
+    <div class="tools">
+      <input id="q" type="search" placeholder="장소·지역·메모 검색">
+      <select id="sort" style="flex:0 0 110px">
+        <option value="date">최신순</option>
+        <option value="old">오래된순</option>
+        <option value="rating">별점순</option>
+        <option value="name">이름순</option>
+      </select>
+    </div>
+    <div class="chips" id="catChips"></div>
+    <div id="list"></div>
+  </section>
+
+  <!-- 지도 -->
+  <section class="tab" id="tab-map">
+    <div id="bigMap"></div>
+  </section>
+
+  <!-- 통계 -->
+  <section class="tab" id="tab-stat">
+    <div id="stats"></div>
+  </section>
+
+  <!-- 설정 -->
+  <section class="tab" id="tab-set">
+    <div class="panel">
+      <h3>백업</h3>
+      <p class="hint">기록은 이 기기의 브라우저 안에만 저장됩니다. 브라우저 데이터를 지우거나 기기를 바꾸면 사라지니, 가끔 백업 파일을 내려받아 두세요. 다른 기기로 옮길 때도 이 파일을 불러오면 됩니다.</p>
+      <div class="row">
+        <button class="btn primary" id="btnExport">백업 내려받기</button>
+        <button class="btn" id="btnImport">백업 불러오기</button>
+      </div>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+    </div>
+    <div class="panel">
+      <h3>분류 관리</h3>
+      <p class="hint">쉼표로 구분해 적으세요. 앞에 이모지를 붙이면 아이콘으로 쓰입니다.</p>
+      <textarea id="catEdit" style="min-height:70px"></textarea>
+      <button class="btn block" id="btnCatSave" style="margin-top:8px">분류 저장</button>
+    </div>
+    <div class="panel">
+      <h3>화면</h3>
+      <select id="theme">
+        <option value="">기기 설정 따르기</option>
+        <option value="light">밝게</option>
+        <option value="dark">어둡게</option>
+      </select>
+    </div>
+    <div class="panel">
+      <h3>휴대폰 홈 화면에 추가</h3>
+      <p class="hint">크롬: 메뉴(⋮) → <b>홈 화면에 추가</b><br>사파리: 공유 버튼 → <b>홈 화면에 추가</b></p>
+    </div>
+  </section>
+</main>
+
+<button class="fab" id="fab" aria-label="새 방문 기록">＋</button>
+
+<nav>
+  <button data-tab="list" class="on"><i>📋</i>목록</button>
+  <button data-tab="map"><i>🗺️</i>지도</button>
+  <button data-tab="stat"><i>📊</i>통계</button>
+  <button data-tab="set"><i>⚙️</i>설정</button>
+</nav>
+
+<!-- 입력 시트 -->
+<div class="sheet" id="formSheet">
+  <div class="top">
+    <button id="fCancel">취소</button>
+    <h2 id="fTitle">새 방문</h2>
+    <button id="fSave">저장</button>
+  </div>
+  <div class="body">
+    <label class="f">장소 이름 *</label>
+    <input id="fName" list="nameList" placeholder="예: 강릉 초당순두부" autocomplete="off">
+    <datalist id="nameList"></datalist>
+
+    <div class="row">
+      <div>
+        <label class="f">방문 날짜</label>
+        <input id="fDate" type="date">
+      </div>
+      <div>
+        <label class="f">분류</label>
+        <select id="fCat"></select>
+      </div>
+    </div>
+
+    <label class="f">별점</label>
+    <div class="rate" id="fRate"></div>
+
+    <label class="f">지역·주소</label>
+    <input id="fAddr" placeholder="예: 강원 강릉시 초당동">
+
+    <label class="f">함께 간 사람</label>
+    <input id="fWith" placeholder="예: 가족, 회사 동료">
+
+    <label class="f">메모</label>
+    <textarea id="fMemo" placeholder="먹은 메뉴, 가격, 느낀 점, 다음에 할 것…"></textarea>
+
+    <label class="f">사진</label>
+    <div class="photos" id="fPhotos"></div>
+    <input type="file" id="fFile" accept="image/*" multiple hidden>
+
+    <label class="f">위치</label>
+    <div class="row">
+      <button class="btn" id="fGeo" type="button">📡 현재 위치</button>
+      <button class="btn" id="fClearGeo" type="button">위치 지우기</button>
+    </div>
+    <div class="hint" id="fGeoTxt" style="margin-top:6px">지도를 눌러 위치를 찍을 수도 있습니다.</div>
+    <div id="pickMap"></div>
+
+    <label class="toggle"><input type="checkbox" id="fAgain"> 💚 다시 가고 싶은 곳</label>
+
+    <div style="height:20px"></div>
+    <button class="btn danger block" id="fDelete" style="display:none">이 기록 삭제</button>
+    <div style="height:40px"></div>
+  </div>
+</div>
+
+<!-- 상세 시트 -->
+<div class="sheet" id="detailSheet">
+  <div class="top">
+    <button id="dClose">‹ 닫기</button>
+    <h2>방문 기록</h2>
+    <button id="dEdit">수정</button>
+  </div>
+  <div class="body" id="dBody"></div>
+</div>
+
+<div id="viewer"><img alt=""></div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+const DEFAULT_CATS = ['🍜 맛집','☕ 카페','🏞️ 명소','✈️ 여행','⛪ 성지','🏨 숙소','🛍️ 쇼핑','📍 기타'];
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0,10); };
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const starStr = n => n ? '★'.repeat(n) + '☆'.repeat(5-n) : '';
+const catIcon = c => { const m = /^(\p{Extended_Pictographic}[️‍\p{Extended_Pictographic}]*)\s*/u.exec(c||''); return m ? m[1] : '📍'; };
+const catName = c => (c||'').replace(/^(\p{Extended_Pictographic}[️‍\p{Extended_Pictographic}]*)\s*/u, '');
+
+function lsGet(k, d){ try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } }
+function lsSet(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), 1800); }
+
+/* ---------- 저장소 (IndexedDB, 실패 시 메모리) ---------- */
+const DB = {
+  db: null, mem: new Map(),
+  open(){
+    return new Promise(res => {
+      try {
+        const r = indexedDB.open('visit-log', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('visits', {keyPath:'id'});
+        r.onsuccess = () => { this.db = r.result; res(); };
+        r.onerror = () => res();
+      } catch { res(); }
+    });
+  },
+  tx(mode){ return this.db.transaction('visits', mode).objectStore('visits'); },
+  all(){
+    if (!this.db) return Promise.resolve([...this.mem.values()]);
+    return new Promise((res, rej) => { const r = this.tx('readonly').getAll(); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  },
+  put(v){
+    if (!this.db) { this.mem.set(v.id, v); return Promise.resolve(); }
+    return new Promise((res, rej) => { const r = this.tx('readwrite').put(v); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
+  },
+  del(id){
+    if (!this.db) { this.mem.delete(id); return Promise.resolve(); }
+    return new Promise((res, rej) => { const r = this.tx('readwrite').delete(id); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
+  }
+};
+
+/* ---------- 상태 ---------- */
+let visits = [];
+let cats = lsGet('cats', DEFAULT_CATS);
+let filterCat = '';
+let editing = null;      // 입력 중인 기록
+let detailId = null;
+
+async function reload(){
+  visits = await DB.all();
+  renderAll();
+}
+function renderAll(){
+  $('#countTxt').textContent = `총 ${visits.length}회 방문`;
+  renderChips(); renderList();
+  if ($('#tab-map').classList.contains('on')) renderBigMap();
+  if ($('#tab-stat').classList.contains('on')) renderStats();
+  $('#nameList').innerHTML = [...new Set(visits.map(v => v.name))].map(n => `<option value="${esc(n)}">`).join('');
+}
+const visitNo = v => visits.filter(x => x.name === v.name && (x.date < v.date || (x.date === v.date && x.created <= v.created))).length;
+const sameCount = name => visits.filter(x => x.name === name).length;
+
+/* ---------- 목록 ---------- */
+function renderChips(){
+  const html = [`<button class="chip ${filterCat===''?'on':''}" data-c="">전체</button>`,
+    `<button class="chip ${filterCat==='__again'?'on':''}" data-c="__again">💚 또 갈 곳</button>`]
+    .concat(cats.map(c => `<button class="chip ${filterCat===c?'on':''}" data-c="${esc(c)}">${esc(c)}</button>`));
+  $('#catChips').innerHTML = html.join('');
+}
+$('#catChips').addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if (!b) return;
+  filterCat = b.dataset.c; renderChips(); renderList();
+});
+$('#q').addEventListener('input', renderList);
+$('#sort').addEventListener('change', () => { lsSet('sort', $('#sort').value); renderList(); });
+
+function filtered(){
+  const q = $('#q').value.trim().toLowerCase();
+  let arr = visits.filter(v => {
+    if (filterCat === '__again' && !v.again) return false;
+    if (filterCat && filterCat !== '__again' && v.cat !== filterCat) return false;
+    if (q && ![v.name, v.addr, v.memo, v.with, v.cat].join(' ').toLowerCase().includes(q)) return false;
+    return true;
+  });
+  const s = $('#sort').value;
+  const byDate = (a,b) => (b.date||'').localeCompare(a.date||'') || (b.created - a.created);
+  if (s === 'date') arr.sort(byDate);
+  else if (s === 'old') arr.sort((a,b) => -byDate(a,b));
+  else if (s === 'rating') arr.sort((a,b) => (b.rating||0) - (a.rating||0) || byDate(a,b));
+  else arr.sort((a,b) => a.name.localeCompare(b.name, 'ko') || byDate(a,b));
+  return arr;
+}
+function renderList(){
+  const arr = filtered();
+  if (!visits.length) {
+    $('#list').innerHTML = `<div class="empty">아직 기록이 없어요.<br>오른쪽 아래 <b>＋</b> 버튼으로 첫 방문을 남겨 보세요.</div>`;
+    return;
+  }
+  if (!arr.length) { $('#list').innerHTML = `<div class="empty">조건에 맞는 기록이 없습니다.</div>`; return; }
+  const groupByMonth = ['date','old'].includes($('#sort').value);
+  let last = '', html = '';
+  for (const v of arr) {
+    if (groupByMonth) {
+      const m = (v.date||'').slice(0,7);
+      if (m !== last) { html += `<div class="month">${m ? m.replace('-','년 ') + '월' : '날짜 없음'}</div>`; last = m; }
+    }
+    const n = sameCount(v.name);
+    html += `<div class="item" data-id="${v.id}">
+      <div class="thumb">${v.photos?.length ? `<img src="${v.photos[0]}" alt="">` : catIcon(v.cat)}</div>
+      <div class="info">
+        <div class="name">${esc(v.name)}${n > 1 ? `<span class="badge">${visitNo(v)}/${n}회</span>` : ''}${v.again ? ' 💚' : ''}</div>
+        <div class="meta">${esc(v.date||'')} · ${esc(catName(v.cat))}${v.addr ? ' · ' + esc(v.addr) : ''}</div>
+        ${v.rating ? `<div class="stars">${starStr(v.rating)}</div>` : ''}
+      </div></div>`;
+  }
+  $('#list').innerHTML = html;
+}
+$('#list').addEventListener('click', e => { const it = e.target.closest('.item'); if (it) openDetail(it.dataset.id); });
+
+/* ---------- 탭 ---------- */
+document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+function showTab(t){
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  document.querySelectorAll('.tab').forEach(s => s.classList.toggle('on', s.id === 'tab-' + t));
+  $('#fab').style.display = (t === 'list' || t === 'map') ? '' : 'none';
+  if (t === 'map') renderBigMap();
+  if (t === 'stat') renderStats();
+  window.scrollTo(0,0);
+}
+
+/* ---------- 지도 ---------- */
+const hasL = () => typeof L !== 'undefined';
+function tile(map){
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+}
+let bigMap = null, bigLayer = null;
+function renderBigMap(){
+  if (!hasL()) { $('#bigMap').innerHTML = '<div class="empty">지도를 불러오지 못했습니다. 인터넷 연결을 확인하세요.</div>'; return; }
+  if (!bigMap) { bigMap = L.map('bigMap'); tile(bigMap); bigLayer = L.layerGroup().addTo(bigMap); }
+  setTimeout(() => bigMap.invalidateSize(), 50);
+  bigLayer.clearLayers();
+  const pts = [];
+  // 같은 장소는 하나의 핀으로
+  const byName = new Map();
+  for (const v of visits) if (v.lat != null) {
+    const g = byName.get(v.name) || []; g.push(v); byName.set(v.name, g);
+  }
+  for (const [name, g] of byName) {
+    g.sort((a,b) => (b.date||'').localeCompare(a.date||''));
+    const v = g[0];
+    const icon = L.divIcon({className:'', html:`<div style="font-size:26px;line-height:1;transform:translate(-50%,-90%);filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">${catIcon(v.cat)}</div>`});
+    const m = L.marker([v.lat, v.lng], {icon}).addTo(bigLayer);
+    m.bindPopup(`<b>${esc(name)}</b><br>${g.length}회 방문 · 최근 ${esc(v.date||'')}<br>${v.rating ? '<span style="color:#f59e0b">'+starStr(v.rating)+'</span><br>' : ''}<a href="#" data-open="${v.id}">자세히 보기</a>`);
+    pts.push([v.lat, v.lng]);
+  }
+  if (pts.length) bigMap.fitBounds(pts, {padding:[40,40], maxZoom:15});
+  else bigMap.setView([36.3, 127.8], 7);
+}
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-open]'); if (!a) return;
+  e.preventDefault(); openDetail(a.dataset.open);
+});
+
+let pickMap = null, pickMarker = null;
+function initPickMap(){
+  if (!hasL()) { $('#pickMap').style.display = 'none'; return; }
+  if (!pickMap) {
+    pickMap = L.map('pickMap'); tile(pickMap);
+    pickMap.on('click', e => setPick(e.latlng.lat, e.latlng.lng));
+  }
+  setTimeout(() => {
+    pickMap.invalidateSize();
+    if (editing.lat != null) { pickMap.setView([editing.lat, editing.lng], 16); }
+    else {
+      const withPos = visits.filter(v => v.lat != null).sort((a,b) => b.created - a.created)[0];
+      if (withPos) pickMap.setView([withPos.lat, withPos.lng], 12); else pickMap.setView([36.3,127.8], 7);
+    }
+  }, 60);
+  drawPick();
+}
+function setPick(lat, lng){ editing.lat = +lat.toFixed(6); editing.lng = +lng.toFixed(6); drawPick(); }
+function drawPick(){
+  $('#fGeoTxt').textContent = editing.lat != null ? `위치: ${editing.lat}, ${editing.lng}` : '지도를 눌러 위치를 찍을 수도 있습니다.';
+  if (!pickMap) return;
+  if (pickMarker) { pickMarker.remove(); pickMarker = null; }
+  if (editing.lat != null) pickMarker = L.marker([editing.lat, editing.lng]).addTo(pickMap);
+}
+$('#fGeo').addEventListener('click', () => {
+  if (!navigator.geolocation) return toast('이 브라우저는 위치를 지원하지 않습니다');
+  $('#fGeoTxt').textContent = '위치 찾는 중…';
+  navigator.geolocation.getCurrentPosition(p => {
+    setPick(p.coords.latitude, p.coords.longitude);
+    if (pickMap) pickMap.setView([editing.lat, editing.lng], 16);
+  }, err => { drawPick(); toast('위치를 가져오지 못했습니다' + (err.code === 1 ? ' (권한 거부)' : '')); },
+  {enableHighAccuracy:true, timeout:15000});
+});
+$('#fClearGeo').addEventListener('click', () => { editing.lat = editing.lng = null; drawPick(); });
+
+/* ---------- 입력 폼 ---------- */
+function fillCatSelect(sel){
+  const list = cats.includes(sel) || !sel ? cats : cats.concat(sel);
+  $('#fCat').innerHTML = list.map(c => `<option ${c===sel?'selected':''}>${esc(c)}</option>`).join('');
+}
+function renderRate(){
+  $('#fRate').innerHTML = [1,2,3,4,5].map(i => `<button type="button" data-r="${i}" class="${i <= editing.rating ? 'on':''}">★</button>`).join('');
+}
+$('#fRate').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const r = +b.dataset.r; editing.rating = editing.rating === r ? 0 : r; renderRate();
+});
+function renderPhotos(){
+  $('#fPhotos').innerHTML = editing.photos.map((p,i) => `<div class="ph"><img src="${p}" alt=""><button type="button" data-del="${i}">✕</button></div>`).join('')
+    + `<div class="addPh" id="addPh">＋</div>`;
+}
+$('#fPhotos').addEventListener('click', e => {
+  const d = e.target.closest('[data-del]');
+  if (d) { editing.photos.splice(+d.dataset.del, 1); renderPhotos(); return; }
+  if (e.target.closest('#addPh')) $('#fFile').click();
+});
+$('#fFile').addEventListener('change', async e => {
+  const files = [...e.target.files]; e.target.value = '';
+  for (const f of files) {
+    try { editing.photos.push(await shrink(f)); } catch { toast('사진을 읽지 못했습니다'); }
+  }
+  renderPhotos();
+});
+function shrink(file, max = 1280, q = 0.8){
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      res(c.toDataURL('image/jpeg', q));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(); };
+    img.src = url;
+  });
+}
+
+function openForm(v, preset){
+  editing = v ? JSON.parse(JSON.stringify(v)) :
+    Object.assign({id:uid(), name:'', date:today(), cat:cats[0], rating:0, addr:'', with:'', memo:'', photos:[], lat:null, lng:null, again:false, created:Date.now()}, preset || {});
+  $('#fTitle').textContent = v ? '기록 수정' : (preset ? '다시 방문' : '새 방문');
+  $('#fName').value = editing.name; $('#fDate').value = editing.date;
+  fillCatSelect(editing.cat);
+  $('#fAddr').value = editing.addr; $('#fWith').value = editing.with; $('#fMemo').value = editing.memo;
+  $('#fAgain').checked = !!editing.again;
+  $('#fDelete').style.display = v ? '' : 'none';
+  renderRate(); renderPhotos();
+  $('#formSheet').classList.add('on'); $('#formSheet').scrollTop = 0;
+  initPickMap();
+  if (!v && !preset) setTimeout(() => $('#fName').focus(), 100);
+}
+// 이전에 간 곳 이름을 고르면 분류·주소·위치를 채워 줌
+$('#fName').addEventListener('change', () => {
+  const prev = visits.filter(x => x.name === $('#fName').value.trim()).sort((a,b) => b.created - a.created)[0];
+  if (!prev || visits.some(x => x.id === editing.id)) return;
+  if (!$('#fAddr').value) $('#fAddr').value = prev.addr || '';
+  fillCatSelect(prev.cat);
+  if (editing.lat == null && prev.lat != null) { setPick(prev.lat, prev.lng); if (pickMap) pickMap.setView([prev.lat, prev.lng], 16); }
+});
+function closeForm(){ $('#formSheet').classList.remove('on'); editing = null; }
+$('#fab').addEventListener('click', () => openForm());
+$('#fCancel').addEventListener('click', closeForm);
+$('#fSave').addEventListener('click', async () => {
+  const name = $('#fName').value.trim();
+  if (!name) { toast('장소 이름을 적어 주세요'); $('#fName').focus(); return; }
+  Object.assign(editing, {name, date:$('#fDate').value, cat:$('#fCat').value, addr:$('#fAddr').value.trim(),
+    with:$('#fWith').value.trim(), memo:$('#fMemo').value, again:$('#fAgain').checked, updated:Date.now()});
+  try { await DB.put(editing); } catch (err) { toast('저장 실패: 저장 공간이 부족할 수 있습니다'); return; }
+  const id = editing.id; closeForm(); await reload();
+  toast('저장했습니다');
+  if (detailId === id) openDetail(id);
+});
+$('#fDelete').addEventListener('click', async () => {
+  if (!editing) return;
+  const b = $('#fDelete');
+  if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = '한 번 더 누르면 삭제됩니다'; setTimeout(() => { b.dataset.confirm = ''; b.textContent = '이 기록 삭제'; }, 3000); return; }
+  b.dataset.confirm = ''; b.textContent = '이 기록 삭제';
+  await DB.del(editing.id); closeForm(); closeDetail(); await reload(); toast('삭제했습니다');
+});
+
+/* ---------- 상세 ---------- */
+let dMap = null;
+function openDetail(id){
+  const v = visits.find(x => x.id === id); if (!v) return;
+  detailId = id;
+  const hist = visits.filter(x => x.name === v.name).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  $('#dBody').innerHTML = `
+    ${v.photos?.length ? `<div class="gallery">${v.photos.map(p => `<img src="${p}" alt="" data-view>`).join('')}</div>` : ''}
+    <div class="dName">${catIcon(v.cat)} ${esc(v.name)} ${v.again ? '💚' : ''}</div>
+    ${v.rating ? `<div class="stars" style="font-size:20px">${starStr(v.rating)}</div>` : ''}
+    <div class="dMeta">
+      📅 ${esc(v.date||'')} ${hist.length > 1 ? `(${visitNo(v)}번째 방문)` : ''}<br>
+      🏷️ ${esc(catName(v.cat))}
+      ${v.addr ? `<br>📌 ${esc(v.addr)}` : ''}
+      ${v.with ? `<br>👥 ${esc(v.with)}` : ''}
+    </div>
+    ${v.memo ? `<div class="memo">${esc(v.memo)}</div>` : ''}
+    ${v.lat != null ? `<div id="dMap"></div>
+      <div class="row"><a class="btn" href="https://map.kakao.com/link/map/${encodeURIComponent(v.name)},${v.lat},${v.lng}" target="_blank" rel="noopener">카카오맵</a>
+      <a class="btn" href="https://map.naver.com/p/search/${encodeURIComponent(v.addr || v.name)}?c=${v.lng},${v.lat},16,0,0,0,dh" target="_blank" rel="noopener">네이버지도</a></div>` : ''}
+    ${hist.length > 1 ? `<div class="panel" style="margin-top:14px"><h3>이곳 방문 이력 (${hist.length}회)</h3><div class="history">
+      ${hist.map(h => h.id === v.id ? `<b>• ${esc(h.date)} ${starStr(h.rating)}</b>` : `<a data-open="${h.id}">• ${esc(h.date)} ${starStr(h.rating)}</a>`).join('<br>')}</div></div>` : ''}
+    <div style="height:14px"></div>
+    <button class="btn primary block" id="dAgain">🔁 이곳 다시 방문 기록하기</button>
+    <div style="height:40px"></div>`;
+  $('#detailSheet').classList.add('on'); $('#detailSheet').scrollTop = 0;
+  if (dMap) { dMap.remove(); dMap = null; }
+  if (v.lat != null && hasL()) {
+    dMap = L.map('dMap', {zoomControl:false, attributionControl:false}); tile(dMap);
+    dMap.setView([v.lat, v.lng], 16); L.marker([v.lat, v.lng]).addTo(dMap);
+    setTimeout(() => dMap.invalidateSize(), 60);
+  }
+  $('#dAgain').onclick = () => openForm(null, {name:v.name, cat:v.cat, addr:v.addr, lat:v.lat, lng:v.lng, again:v.again});
+}
+function closeDetail(){ $('#detailSheet').classList.remove('on'); detailId = null; }
+$('#dClose').addEventListener('click', closeDetail);
+$('#dEdit').addEventListener('click', () => { const v = visits.find(x => x.id === detailId); if (v) openForm(v); });
+$('#dBody').addEventListener('click', e => {
+  const im = e.target.closest('[data-view]'); if (!im) return;
+  $('#viewer img').src = im.src; $('#viewer').classList.add('on');
+});
+$('#viewer').addEventListener('click', () => $('#viewer').classList.remove('on'));
+
+// 휴대폰 뒤로가기 버튼으로 시트 닫기
+history.replaceState({base:1}, '');
+const sheetObserver = new MutationObserver(() => {
+  const open = document.querySelectorAll('.sheet.on, #viewer.on').length;
+  if (open > (sheetObserver.depth || 0)) history.pushState({sheet:open}, '');
+  sheetObserver.depth = open;
+});
+document.querySelectorAll('.sheet, #viewer').forEach(el => sheetObserver.observe(el, {attributes:true, attributeFilter:['class']}));
+window.addEventListener('popstate', () => {
+  sheetObserver.depth = Math.max(0, (sheetObserver.depth || 1) - 1);
+  if ($('#viewer').classList.contains('on')) $('#viewer').classList.remove('on');
+  else if ($('#formSheet').classList.contains('on')) closeForm();
+  else if ($('#detailSheet').classList.contains('on')) closeDetail();
+});
+
+/* ---------- 통계 ---------- */
+function bars(entries){
+  const max = Math.max(1, ...entries.map(e => e[1]));
+  return entries.map(([k,n]) => `<div class="bar"><span class="lab">${esc(k)}</span><span class="track"><span class="fill" style="width:${n/max*100}%;display:block"></span></span><span class="n">${n}</span></div>`).join('');
+}
+function renderStats(){
+  if (!visits.length) { $('#stats').innerHTML = '<div class="empty">기록이 쌓이면 통계가 보입니다.</div>'; return; }
+  const places = new Set(visits.map(v => v.name)).size;
+  const y = today().slice(0,4);
+  const thisYear = visits.filter(v => (v.date||'').startsWith(y)).length;
+  const byCat = {}; visits.forEach(v => byCat[catName(v.cat)] = (byCat[catName(v.cat)]||0) + 1);
+  const months = [];
+  const d = new Date(); d.setDate(1);
+  for (let i = 11; i >= 0; i--) {
+    const m = new Date(d.getFullYear(), d.getMonth() - i, 1);
+    const key = `${m.getFullYear()}-${String(m.getMonth()+1).padStart(2,'0')}`;
+    months.push([`${String(m.getFullYear()).slice(2)}년 ${m.getMonth()+1}월`, visits.filter(v => (v.date||'').startsWith(key)).length]);
+  }
+  const cnt = {}; visits.forEach(v => cnt[v.name] = (cnt[v.name]||0) + 1);
+  const top = Object.entries(cnt).sort((a,b) => b[1]-a[1]).slice(0,10);
+  const best = Object.entries(visits.reduce((o,v) => { if (v.rating) (o[v.name] = o[v.name] || []).push(v.rating); return o; }, {}))
+    .map(([k,a]) => [k, a.reduce((s,x)=>s+x,0)/a.length]).sort((a,b) => b[1]-a[1]).slice(0,5);
+  $('#stats').innerHTML = `
+    <div class="statGrid">
+      <div class="stat"><b>${visits.length}</b><span>전체 방문</span></div>
+      <div class="stat"><b>${places}</b><span>다녀온 곳</span></div>
+      <div class="stat"><b>${thisYear}</b><span>${y}년 방문</span></div>
+    </div>
+    <div class="panel"><h3>최근 12개월</h3>${bars(months)}</div>
+    <div class="panel"><h3>분류별</h3>${bars(Object.entries(byCat).sort((a,b)=>b[1]-a[1]))}</div>
+    <div class="panel"><h3>자주 간 곳</h3>${bars(top)}</div>
+    ${best.length ? `<div class="panel"><h3>별점 높은 곳</h3>${best.map(([k,r]) => `<div class="bar"><span class="lab" style="width:auto;flex:1">${esc(k)}</span><span class="stars">${starStr(Math.round(r))}</span><span class="n" style="width:36px">${r.toFixed(1)}</span></div>`).join('')}</div>` : ''}`;
+}
+
+/* ---------- 설정 ---------- */
+$('#catEdit').value = cats.join(', ');
+$('#btnCatSave').addEventListener('click', () => {
+  const list = $('#catEdit').value.split(',').map(s => s.trim()).filter(Boolean);
+  if (!list.length) return toast('분류를 하나 이상 적어 주세요');
+  cats = [...new Set(list)]; lsSet('cats', cats); $('#catEdit').value = cats.join(', ');
+  if (!cats.includes(filterCat) && filterCat !== '__again') filterCat = '';
+  renderAll(); toast('분류를 저장했습니다');
+});
+function applyTheme(t){ if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; }
+$('#theme').value = lsGet('theme', ''); applyTheme($('#theme').value);
+$('#theme').addEventListener('change', () => { lsSet('theme', $('#theme').value); applyTheme($('#theme').value); });
+$('#sort').value = lsGet('sort', 'date');
+
+$('#btnExport').addEventListener('click', () => {
+  const data = JSON.stringify({app:'visit-log', version:1, exported:new Date().toISOString(), cats, visits});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([data], {type:'application/json'}));
+  a.download = `방문기록_백업_${today()}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast(`${visits.length}건 백업 파일을 만들었습니다`);
+});
+$('#btnImport').addEventListener('click', () => $('#importFile').click());
+$('#importFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    if (!Array.isArray(data.visits)) throw 0;
+    let added = 0, updated = 0;
+    const have = new Map(visits.map(v => [v.id, v]));
+    for (const v of data.visits) {
+      if (!v || !v.id || !v.name) continue;
+      const cur = have.get(v.id);
+      if (!cur) { await DB.put(v); added++; }
+      else if ((v.updated||v.created||0) > (cur.updated||cur.created||0)) { await DB.put(v); updated++; }
+    }
+    if (Array.isArray(data.cats)) { cats = [...new Set(cats.concat(data.cats))]; lsSet('cats', cats); $('#catEdit').value = cats.join(', '); }
+    await reload();
+    toast(`불러오기 완료: 추가 ${added}건, 갱신 ${updated}건`);
+  } catch { toast('백업 파일이 올바르지 않습니다'); }
+});
+
+/* ---------- 시작 ---------- */
+renderAll();
+DB.open().then(reload);
+</script>
+</body>
+</html>
