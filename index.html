@@ -68,6 +68,21 @@ textarea{min-height:90px;resize:vertical}
 .badge{display:inline-block;font-size:11px;background:var(--accent-soft);color:var(--accent);
   border-radius:6px;padding:1px 6px;margin-left:4px;font-weight:600;vertical-align:1px}
 .empty{text-align:center;color:var(--sub);padding:60px 10px;line-height:1.7}
+/* 숨김·여러 개 고르기 */
+.item.hid{opacity:.6}
+.item .chk{flex:none;width:26px;height:26px;border-radius:50%;border:2px solid var(--line);display:none;
+  align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:700}
+#list.sel .item .chk{display:flex}
+#list.sel .item.on .chk{background:var(--accent);border-color:var(--accent)}
+#list.sel .item.on{outline:2px solid var(--accent)}
+#list.sel{padding-bottom:70px}
+.selBar{position:fixed;left:0;right:0;bottom:calc(62px + env(safe-area-inset-bottom));z-index:32;background:var(--card);
+  border-top:1px solid var(--line);box-shadow:0 -2px 10px rgba(0,0,0,.12);padding:10px 16px;display:none}
+.selBar.on{display:block}
+.selBar .in{max-width:720px;margin:0 auto;display:flex;gap:8px;align-items:center}
+.selBar .n{flex:1;font-weight:700;font-size:14px}
+.selBar .btn{padding:9px 12px}
+.selBar .btn:disabled{opacity:.4}
 
 /* 지도 */
 #bigMap{height:calc(100vh - 170px);border-radius:14px;overflow:hidden}
@@ -204,6 +219,7 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
         <option value="rating">별점순</option>
         <option value="name">이름순</option>
       </select>
+      <button class="btn" id="btnSel" type="button" style="flex:0 0 auto">선택</button>
     </div>
     <div class="chips" id="catChips"></div>
     <div id="list"></div>
@@ -293,6 +309,13 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
 </main>
 
 <button class="fab" id="fab" aria-label="새 방문 기록">＋</button>
+
+<div class="selBar" id="selBar"><div class="in">
+  <span class="n" id="selN">0개 선택</span>
+  <button class="btn" id="selHide">🙈 숨기기</button>
+  <button class="btn danger" id="selDel">🗑️ 삭제</button>
+  <button class="btn" id="selCancel">취소</button>
+</div></div>
 
 <nav>
   <button data-tab="list" class="on"><i>📋</i>목록</button>
@@ -446,18 +469,21 @@ const DB = {
 };
 
 /* ---------- 상태 ---------- */
-let visits = [];
+let allVisits = [];     // 숨긴 것까지 전부(동기화·백업용)
+let visits = [];        // 숨긴 기록을 뺀 것 — 목록·지도·달력·통계는 이것만
 let cats = lsGet('cats', DEFAULT_CATS);
 let filterCat = '';
 let editing = null;      // 입력 중인 기록
 let detailId = null;
 
 async function reload(){
-  visits = await DB.all();
+  allVisits = await DB.all();
+  visits = allVisits.filter(v => !v.hidden);
   renderAll();
 }
 function renderAll(){
-  $('#countTxt').textContent = `총 ${visits.length}회 방문`;
+  const nh = allVisits.length - visits.length;
+  $('#countTxt').textContent = `총 ${visits.length}회 방문${nh ? ` · 숨김 ${nh}` : ''}`;
   renderChips(); renderList();
   if ($('#tab-map').classList.contains('on')) renderBigMap();
   if ($('#tab-stat').classList.contains('on')) renderStats();
@@ -466,26 +492,30 @@ function renderAll(){
 }
 const visitNo = v => visits.filter(x => x.name === v.name && (x.date < v.date || (x.date === v.date && x.created <= v.created))).length;
 const sameCount = name => visits.filter(x => x.name === name).length;
+const findVisit = id => allVisits.find(x => x.id === id);
 
 /* ---------- 목록 ---------- */
 function renderChips(){
   const html = [`<button class="chip ${filterCat===''?'on':''}" data-c="">전체</button>`,
     `<button class="chip ${filterCat==='__again'?'on':''}" data-c="__again">💚 또 갈 곳</button>`]
     .concat(cats.map(c => `<button class="chip ${filterCat===c?'on':''}" data-c="${esc(c)}">${esc(c)}</button>`));
+  const nh = allVisits.length - visits.length;
+  if (nh || filterCat === '__hidden') html.push(`<button class="chip ${filterCat==='__hidden'?'on':''}" data-c="__hidden">🙈 숨긴 기록 ${nh}</button>`);
   $('#catChips').innerHTML = html.join('');
 }
 $('#catChips').addEventListener('click', e => {
   const b = e.target.closest('.chip'); if (!b) return;
-  filterCat = b.dataset.c; renderChips(); renderList();
+  filterCat = b.dataset.c; selIds.clear(); renderChips(); renderList();
 });
 $('#q').addEventListener('input', renderList);
 $('#sort').addEventListener('change', () => { lsSet('sort', $('#sort').value); renderList(); });
 
 function filtered(){
   const q = $('#q').value.trim().toLowerCase();
-  let arr = visits.filter(v => {
+  const base = filterCat === '__hidden' ? allVisits.filter(v => v.hidden) : visits;
+  let arr = base.filter(v => {
     if (filterCat === '__again' && !v.again) return false;
-    if (filterCat && filterCat !== '__again' && v.cat !== filterCat) return false;
+    if (filterCat && filterCat !== '__again' && filterCat !== '__hidden' && v.cat !== filterCat) return false;
     if (q && ![v.name, v.addr, v.memo, v.with, v.cat].join(' ').toLowerCase().includes(q)) return false;
     return true;
   });
@@ -499,11 +529,12 @@ function filtered(){
 }
 function renderList(){
   const arr = filtered();
-  if (!visits.length) {
+  $('#list').classList.toggle('sel', selMode); renderSelBar(arr);
+  if (!allVisits.length) {
     $('#list').innerHTML = `<div class="empty">아직 기록이 없어요.<br>오른쪽 아래 <b>＋</b> 버튼으로 첫 방문을 남겨 보세요.</div>`;
     return;
   }
-  if (!arr.length) { $('#list').innerHTML = `<div class="empty">조건에 맞는 기록이 없습니다.</div>`; return; }
+  if (!arr.length) { $('#list').innerHTML = `<div class="empty">${filterCat === '__hidden' ? '숨긴 기록이 없습니다.' : '조건에 맞는 기록이 없습니다.'}</div>`; return; }
   const groupByMonth = ['date','old'].includes($('#sort').value);
   let last = '', html = '';
   for (const v of arr) {
@@ -517,15 +548,76 @@ function renderList(){
 }
 function itemHtml(v){
   const n = sameCount(v.name);
-  return `<div class="item" data-id="${v.id}">
+  return `<div class="item${v.hidden ? ' hid' : ''}${selIds.has(v.id) ? ' on' : ''}" data-id="${v.id}">
+      <span class="chk">✓</span>
       <div class="thumb">${v.photos?.length ? `<img src="${v.photos[0]}" alt="">` : catIcon(v.cat)}</div>
       <div class="info">
-        <div class="name">${esc(v.name)}${n > 1 ? `<span class="badge">${visitNo(v)}/${n}회</span>` : ''}${v.again ? ' 💚' : ''}</div>
+        <div class="name">${v.hidden ? '🙈 ' : ''}${esc(v.name)}${n > 1 && !v.hidden ? `<span class="badge">${visitNo(v)}/${n}회</span>` : ''}${v.again ? ' 💚' : ''}</div>
         <div class="meta">${esc(v.date||'')} · ${esc(catName(v.cat))}${v.addr ? ' · ' + esc(v.addr) : ''}</div>
         ${v.rating ? `<div class="stars">${starStr(v.rating)}</div>` : ''}
       </div></div>`;
 }
-$('#list').addEventListener('click', e => { const it = e.target.closest('.item'); if (it) openDetail(it.dataset.id); });
+$('#list').addEventListener('click', e => {
+  const it = e.target.closest('.item'); if (!it) return;
+  if (!selMode) return openDetail(it.dataset.id);
+  const id = it.dataset.id;
+  if (selIds.has(id)) selIds.delete(id); else selIds.add(id);
+  it.classList.toggle('on', selIds.has(id)); renderSelBar();
+});
+
+/* ---------- 숨기기·삭제 ---------- */
+// 숨김 = 기록의 hidden 표시(지우지 않음, 동기화로 다른 기기도 같이 숨김). 목록 [🙈 숨긴 기록]에서 다시 보이게 할 수 있음
+let selMode = false;
+const selIds = new Set();
+async function setHidden(ids, hide){
+  const now = Date.now();
+  for (const id of ids) {
+    const v = findVisit(id); if (!v || !!v.hidden === hide) continue;
+    const nv = Object.assign({}, v, {updated: now}); if (hide) nv.hidden = true; else delete nv.hidden;
+    await DB.put(nv);
+  }
+  await reload(); syncSoon();
+}
+async function delVisits(ids){
+  for (const id of ids) { markGone(id); await DB.del(id); }
+  await reload(); syncSoon();
+}
+// 위험한 단추는 두 번 눌러야 실행(3초 안에)
+function twice(b, ask){
+  if (b.dataset.confirm === '1') { clearTimeout(b._t); b.dataset.confirm = ''; b.textContent = b._txt; return true; }
+  b._txt = b.textContent; b.dataset.confirm = '1'; b.textContent = ask;
+  b._t = setTimeout(() => { b.dataset.confirm = ''; b.textContent = b._txt; }, 3000);
+  return false;
+}
+function setSelMode(on){
+  selMode = on; selIds.clear();
+  $('#btnSel').textContent = on ? '완료' : '선택';
+  $('#fab').style.display = on ? 'none' : '';
+  renderList();
+}
+function renderSelBar(arr){
+  $('#selBar').classList.toggle('on', selMode && $('#tab-list').classList.contains('on'));
+  if (!selMode) return;
+  // 검색·필터로 화면에서 빠진 것은 고른 것에서도 뺌
+  if (arr) { const keep = new Set(arr.map(v => v.id)); for (const id of [...selIds]) if (!keep.has(id)) selIds.delete(id); }
+  $('#selN').textContent = `${selIds.size}개 선택`;
+  $('#selHide').textContent = filterCat === '__hidden' ? '👁️ 숨김 풀기' : '🙈 숨기기';
+  $('#selHide').disabled = $('#selDel').disabled = !selIds.size;
+}
+$('#btnSel').addEventListener('click', () => setSelMode(!selMode));
+$('#selCancel').addEventListener('click', () => setSelMode(false));
+$('#selHide').addEventListener('click', async () => {
+  if (!selIds.size) return;
+  const hide = filterCat !== '__hidden', n = selIds.size;
+  await setHidden([...selIds], hide); setSelMode(false);
+  toast(hide ? `${n}건을 숨겼습니다 — [🙈 숨긴 기록]에서 다시 볼 수 있어요` : `${n}건을 다시 보이게 했습니다`);
+});
+$('#selDel').addEventListener('click', async () => {
+  if (!selIds.size) return;
+  const b = $('#selDel'), n = selIds.size;
+  if (!twice(b, `${n}건 정말 삭제?`)) return;
+  await delVisits([...selIds]); setSelMode(false); toast(`${n}건을 삭제했습니다`);
+});
 
 /* ---------- 공휴일 (한국) ---------- */
 // 양력 고정 공휴일 [월-일, 이름, 대체공휴일 대상 여부, 시작 연도]
@@ -848,7 +940,7 @@ async function savePlace(nameOnly){
     closePlace(); toast('장소 정보를 채웠습니다 — [저장]을 누르세요');
     return;
   }
-  const v = visits.find(x => x.id === t.id); if (!v) return closePlace();
+  const v = findVisit(t.id); if (!v) return closePlace();
   const nv = Object.assign({}, v, {place: visitPlace(pp), lat: pp.lat, lng: pp.lng, addr: v.addr || pp.road || pp.addr || '',
     photos: (v.photos || []).concat(photos), updated: Date.now()});
   try { await DB.put(nv); } catch { toast('저장 실패: 저장 공간이 부족할 수 있습니다'); return; }
@@ -904,6 +996,7 @@ $('#calList').addEventListener('click', e => {
 /* ---------- 탭 ---------- */
 document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
 function showTab(t){
+  if (selMode && t !== 'list') setSelMode(false);
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   document.querySelectorAll('.tab').forEach(s => s.classList.toggle('on', s.id === 'tab-' + t));
   $('#fab').style.display = (t === 'list' || t === 'map' || t === 'cal') ? '' : 'none';
@@ -1055,7 +1148,7 @@ $('#fName').addEventListener('input', () => { if (editing?.place && $('#fName').
 // 이전에 간 곳 이름을 고르면 분류·주소·위치를 채워 줌
 $('#fName').addEventListener('change', () => {
   const prev = visits.filter(x => x.name === $('#fName').value.trim()).sort((a,b) => b.created - a.created)[0];
-  if (!prev || visits.some(x => x.id === editing.id)) return;
+  if (!prev || allVisits.some(x => x.id === editing.id)) return;
   if (!$('#fAddr').value) $('#fAddr').value = prev.addr || '';
   fillCatSelect(prev.cat);
   if (editing.lat == null && prev.lat != null) { setPick(prev.lat, prev.lng); if (pickMap) pickMap.setView([prev.lat, prev.lng], 16); }
@@ -1081,18 +1174,18 @@ $('#fDelete').addEventListener('click', async () => {
   const b = $('#fDelete');
   if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = '한 번 더 누르면 삭제됩니다'; setTimeout(() => { b.dataset.confirm = ''; b.textContent = '이 기록 삭제'; }, 3000); return; }
   b.dataset.confirm = ''; b.textContent = '이 기록 삭제';
-  markGone(editing.id);
-  await DB.del(editing.id); closeForm(); closeDetail(); await reload(); toast('삭제했습니다'); syncSoon();
+  const id = editing.id; closeForm(); closeDetail(); await delVisits([id]); toast('삭제했습니다');
 });
 
 /* ---------- 상세 ---------- */
 let dMap = null;
 function openDetail(id){
-  const v = visits.find(x => x.id === id); if (!v) return;
+  const v = findVisit(id); if (!v) return;
   detailId = id;
-  const hist = visits.filter(x => x.name === v.name).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const hist = (v.hidden ? [v] : visits).filter(x => x.name === v.name).sort((a,b) => (b.date||'').localeCompare(a.date||''));
   $('#dBody').innerHTML = `
     ${v.photos?.length ? `<div class="gallery">${v.photos.map(p => `<img src="${p}" alt="" data-view>`).join('')}</div>` : ''}
+    ${v.hidden ? `<div class="hint" style="margin-bottom:6px">🙈 숨긴 기록 — 목록·지도·달력·통계에 안 나옵니다</div>` : ''}
     <div class="dName">${catIcon(v.cat)} ${esc(v.name)} ${v.again ? '💚' : ''}</div>
     ${v.rating ? `<div class="stars" style="font-size:20px">${starStr(v.rating)}</div>` : ''}
     <div class="dMeta">
@@ -1116,6 +1209,11 @@ function openDetail(id){
     <button class="btn block" id="dEdit2">✏️ 이 기록 수정</button>
     <div style="height:8px"></div>
     <button class="btn primary block" id="dAgain">🔁 이곳 다시 방문 기록하기</button>
+    <div style="height:8px"></div>
+    <div class="row">
+      <button class="btn" id="dHide">${v.hidden ? '👁️ 숨김 풀기' : '🙈 목록에서 숨기기'}</button>
+      <button class="btn danger" id="dDel">🗑️ 삭제</button>
+    </div>
     <div style="height:40px"></div>`;
   $('#detailSheet').classList.add('on'); $('#detailSheet').scrollTop = 0;
   if (dMap) { dMap.remove(); dMap = null; }
@@ -1127,10 +1225,19 @@ function openDetail(id){
   $('#dAgain').onclick = () => openForm(null, {name:v.name, cat:v.cat, addr:v.addr, lat:v.lat, lng:v.lng, again:v.again, place:v.place});
   const df = $('#dFind'); if (df) df.onclick = () => openPlaceFor({kind: 'visit', id: v.id}, v.name, true);
   $('#dEdit2').onclick = () => openForm(v);
+  $('#dHide').onclick = async () => {
+    await setHidden([v.id], !v.hidden);
+    if (v.hidden) { openDetail(v.id); toast('다시 보이게 했습니다'); }
+    else { closeDetail(); toast('숨겼습니다 — 목록 [🙈 숨긴 기록]에서 다시 볼 수 있어요'); }
+  };
+  $('#dDel').onclick = async e => {
+    if (!twice(e.currentTarget, '한 번 더 누르면 삭제')) return;
+    closeDetail(); await delVisits([v.id]); toast('삭제했습니다');
+  };
 }
 function closeDetail(){ $('#detailSheet').classList.remove('on'); detailId = null; }
 $('#dClose').addEventListener('click', closeDetail);
-$('#dEdit').addEventListener('click', () => { const v = visits.find(x => x.id === detailId); if (v) openForm(v); });
+$('#dEdit').addEventListener('click', () => { const v = findVisit(detailId); if (v) openForm(v); });
 $('#dBody').addEventListener('click', e => {
   const im = e.target.closest('[data-view]'); if (!im) return;
   $('#viewer img').src = im.src; $('#viewer').classList.add('on');
@@ -1193,7 +1300,7 @@ $('#btnCatSave').addEventListener('click', () => {
   const list = $('#catEdit').value.split(',').map(s => s.trim()).filter(Boolean);
   if (!list.length) return toast('분류를 하나 이상 적어 주세요');
   cats = [...new Set(list)]; lsSet('cats', cats); $('#catEdit').value = cats.join(', ');
-  if (!cats.includes(filterCat) && filterCat !== '__again') filterCat = '';
+  if (!cats.includes(filterCat) && filterCat !== '__again' && filterCat !== '__hidden') filterCat = '';
   renderAll(); toast('분류를 저장했습니다');
 });
 function applyTheme(t){ if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; }
@@ -1202,13 +1309,13 @@ $('#theme').addEventListener('change', () => { lsSet('theme', $('#theme').value)
 $('#sort').value = lsGet('sort', 'date');
 
 $('#btnExport').addEventListener('click', () => {
-  const data = JSON.stringify({app:'visit-log', version:1, exported:new Date().toISOString(), cats, visits, plans, plansGone:[...plansGone]});
+  const data = JSON.stringify({app:'visit-log', version:1, exported:new Date().toISOString(), cats, visits: allVisits, plans, plansGone:[...plansGone]});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([data], {type:'application/json'}));
   a.download = `방문기록_백업_${today()}.json`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  toast(`${visits.length}건 백업 파일을 만들었습니다`);
+  toast(`${allVisits.length}건 백업 파일을 만들었습니다`);
 });
 $('#btnImport').addEventListener('click', () => $('#importFile').click());
 $('#importFile').addEventListener('change', async e => {
@@ -1217,7 +1324,7 @@ $('#importFile').addEventListener('change', async e => {
     const data = JSON.parse(await f.text());
     if (!Array.isArray(data.visits)) throw 0;
     let added = 0, updated = 0;
-    const have = new Map(visits.map(v => [v.id, v]));
+    const have = new Map(allVisits.map(v => [v.id, v]));
     for (const v of data.visits) {
       if (!v || !v.id || !v.name) continue;
       const cur = have.get(v.id);
@@ -1286,9 +1393,9 @@ async function syncCloud(){
         }
         return out;
       };
-      const localV = Object.fromEntries(visits.map(v => [v.id, v]));
+      const localV = Object.fromEntries(allVisits.map(v => [v.id, v]));
       // 동기화 도중 사용자가 고친·지운 기록은 덮어쓰지 않으려고 시작 시점의 수정 시각을 적어 둠(아래에서 비교)
-      const snapV = Object.fromEntries(visits.map(v => [v.id, stamp(v)]));
+      const snapV = Object.fromEntries(allVisits.map(v => [v.id, stamp(v)]));
       const snapP = Object.fromEntries(Object.entries(plans).map(([k, p]) => [k, stamp(p)]));
       const allGone = Object.assign({}, remote.gone || {});
       for (const [k, t] of Object.entries(gone)) allGone[k] = Math.max(allGone[k] || 0, t);
@@ -1407,7 +1514,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.5.3';
+const APP_VERSION = 'v1.6.0';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 나의 방문기록 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
