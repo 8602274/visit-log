@@ -635,9 +635,16 @@ function planHtml(p){
     <div class="pt"><b>📌 ${esc(p.time || '시간 미정')}</b>${esc(p.title)}</div>
     ${pl ? `<div class="pm">${pl.cat ? '🏷️ ' + esc(pl.cat) + '\n' : ''}📍 ${esc(pl.road || pl.addr || '')}${pl.phone ? '\n📞 <a href="tel:' + esc(pl.phone) + '">' + esc(pl.phone) + '</a>' : ''}${pl.url ? '\n<a href="' + esc(pl.url) + '" target="_blank" rel="noopener">카카오맵에서 보기 ›</a>' : ''}</div>` : ''}
     ${p.photos?.length ? `<div class="pph">${p.photos.map(s => `<img src="${s}" alt="" data-view>`).join('')}</div>` : ''}
+    ${p.note ? `<div class="pm" style="color:var(--text)">📝 ${esc(p.note)}</div>` : ''}
     <div class="pm">카톡 ${esc(p.room)} · ${esc(p.who)} ${esc((p.said || '').slice(5))}: “${esc(p.text)}”${ctx ? '\n' + esc(ctx) : ''}</div>
-    <div class="pb"><button class="btn" data-pa="place">🔍 장소 찾기</button><button class="btn" data-pa="visit">방문으로 기록</button>
-      <button class="btn danger" data-pa="del">지우기</button></div></div>`;
+    <div class="pb"><button class="btn" data-pa="edit">✏️ 수정</button><button class="btn" data-pa="place">🔍 장소 찾기</button><button class="btn" data-pa="visit">방문으로 기록</button>
+      <button class="btn danger" data-pa="del">지우기</button></div>
+    <div class="pe" style="display:none">
+      <div class="row" style="margin-top:8px"><input type="date" data-pf="date" value="${esc(p.date)}"><input type="time" data-pf="time" value="${esc(p.time || '')}"></div>
+      <input data-pf="title" value="${esc(p.title.replace(/^약속 · /, ''))}" placeholder="약속 이름(장소)" style="margin-top:6px">
+      <textarea data-pf="note" placeholder="메모" style="margin-top:6px;min-height:60px">${esc(p.note || '')}</textarea>
+      <div class="pb"><button class="btn primary" data-pa="esave">저장</button><button class="btn" data-pa="ecancel">취소</button></div>
+    </div></div>`;
 }
 
 /* ---------- 약속 (PC 카톡 약속 감시 도구에서 가져옴) ---------- */
@@ -675,7 +682,18 @@ $('#calList').addEventListener('click', e => {
   const b = e.target.closest('[data-pa]'); if (!b) return;
   e.stopPropagation();
   const id = b.closest('[data-plan]').dataset.plan, p = plans[id]; if (!p) return;
-  if (b.dataset.pa === 'place') {
+  const card = b.closest('[data-plan]');
+  if (b.dataset.pa === 'edit' || b.dataset.pa === 'ecancel') {
+    const pe = card.querySelector('.pe'), open = b.dataset.pa === 'edit' && pe.style.display === 'none';
+    pe.style.display = open ? '' : 'none';
+    if (open) card.querySelector('[data-pf="title"]').focus();
+  } else if (b.dataset.pa === 'esave') {
+    const f = k => card.querySelector(`[data-pf="${k}"]`).value.trim();
+    if (!f('date')) return toast('날짜를 넣어 주세요');
+    p.date = f('date'); p.time = f('time'); p.title = f('title') || p.title; p.note = f('note'); p.updated = Date.now();
+    savePlans(); syncSoon();
+    calMonth = p.date.slice(0, 7); calSel = p.date; lsSet('calMonth', calMonth); renderCal(); toast('약속을 고쳤습니다');
+  } else if (b.dataset.pa === 'place') {
     openPlace(id);
   } else if (b.dataset.pa === 'del') {
     if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = '한 번 더'; setTimeout(() => { b.dataset.confirm = ''; b.textContent = '지우기'; }, 3000); return; }
@@ -683,7 +701,7 @@ $('#calList').addEventListener('click', e => {
   } else if (b.dataset.pa === 'visit') {
     const pl = p.place || {};
     openForm(null, Object.assign({name: p.title.replace(/^약속 · /, ''), date: p.date, with: p.room,
-      memo: `카톡 약속${p.time ? ' ' + p.time : ''}: ${p.text}`, fromPlan: id, photos: (p.photos || []).slice()},
+      memo: `카톡 약속${p.time ? ' ' + p.time : ''}: ${p.text}${p.note ? '\n' + p.note : ''}`, fromPlan: id, photos: (p.photos || []).slice()},
       pl.lat != null ? {lat: pl.lat, lng: pl.lng} : {}, pl.road || pl.addr ? {addr: pl.road || pl.addr} : {},
       pl.cat ? {cat: catFromKakao(pl.cat)} : {}, pl.name ? {place: visitPlace(pl)} : {}));
   }
@@ -1093,6 +1111,8 @@ function openDetail(id){
     ${hist.length > 1 ? `<div class="panel" style="margin-top:14px"><h3>이곳 방문 이력 (${hist.length}회)</h3><div class="history">
       ${hist.map(h => h.id === v.id ? `<b>• ${esc(h.date)} ${starStr(h.rating)}</b>` : `<a data-open="${h.id}">• ${esc(h.date)} ${starStr(h.rating)}</a>`).join('<br>')}</div></div>` : ''}
     <div style="height:14px"></div>
+    <button class="btn block" id="dEdit2">✏️ 이 기록 수정</button>
+    <div style="height:8px"></div>
     <button class="btn primary block" id="dAgain">🔁 이곳 다시 방문 기록하기</button>
     <div style="height:40px"></div>`;
   $('#detailSheet').classList.add('on'); $('#detailSheet').scrollTop = 0;
@@ -1104,6 +1124,7 @@ function openDetail(id){
   }
   $('#dAgain').onclick = () => openForm(null, {name:v.name, cat:v.cat, addr:v.addr, lat:v.lat, lng:v.lng, again:v.again, place:v.place});
   const df = $('#dFind'); if (df) df.onclick = () => openPlaceFor({kind: 'visit', id: v.id}, v.name, true);
+  $('#dEdit2').onclick = () => openForm(v);
 }
 function closeDetail(){ $('#detailSheet').classList.remove('on'); detailId = null; }
 $('#dClose').addEventListener('click', closeDetail);
@@ -1365,7 +1386,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.5.0';
+const APP_VERSION = 'v1.5.1';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 나의 방문기록 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
