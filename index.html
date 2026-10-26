@@ -147,6 +147,8 @@ nav button.on{color:var(--accent);font-weight:700}
 /* 시트(모달) */
 .sheet{position:fixed;inset:0;z-index:50;background:var(--bg);overflow-y:auto;display:none}
 .sheet.on{display:block}
+/* 겹치는 순서: 상세(50) < 입력·수정 폼(60) < 장소 찾기(70) < 사진 보기(80) — 상세에서 [수정]을 누르면 폼이 위로 */
+#formSheet{z-index:60}#placeSheet{z-index:70}
 .sheet .top{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;align-items:center;
   justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
 .sheet .top h2{font-size:17px;margin:0}
@@ -1405,7 +1407,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.5.2';
+const APP_VERSION = 'v1.5.3';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 나의 방문기록 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
