@@ -103,6 +103,13 @@ textarea{min-height:90px;resize:vertical}
 .cal .d.now.ph .td{color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.8)}
 .cal .d.sel{box-shadow:inset 0 0 0 3px var(--star)}
 .calDay{font-size:15px;font-weight:700;margin:16px 2px 8px}
+/* 약속(카톡에서 가져옴) */
+.cal .d .pl{position:absolute;left:2px;right:2px;bottom:2px;z-index:3;background:#7c3aed;color:#fff;border-radius:6px;
+  font-size:9px;font-weight:700;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plan{background:var(--card);border-radius:14px;padding:12px;margin-bottom:8px;box-shadow:var(--shadow);border-left:5px solid #7c3aed}
+.plan .pt{font-weight:700}.plan .pt b{color:#7c3aed;margin-right:6px}
+.plan .pm{font-size:13px;color:var(--sub);margin-top:4px;line-height:1.6;white-space:pre-wrap;word-break:break-all}
+.plan .pb{display:flex;gap:6px;margin-top:8px}.plan .pb .btn{padding:7px 10px;font-size:13px}
 
 /* 통계 */
 .statGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
@@ -229,6 +236,13 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
         <button class="btn" id="btnImport">백업 불러오기</button>
       </div>
       <input type="file" id="importFile" accept=".json,application/json" hidden>
+    </div>
+    <div class="panel" id="planPanel">
+      <h3>PC 카톡 약속 가져오기</h3>
+      <p class="hint">PC에서 <b>카톡 약속 감시</b> 도구가 켜져 있으면, 열어 둔 카톡 대화방의 약속(예: "토요일 3시")을 달력에 📌로 넣습니다. 폰에서는 쓰지 않습니다. 처음 한 번 크롬이 "로컬 네트워크 접근"을 물으면 허용하세요.</p>
+      <label class="toggle" style="margin-top:4px"><input type="checkbox" id="planSync"> 가져오기 켜기</label>
+      <p class="hint" id="planInfo" style="margin-top:6px">감시 도구 연결 안 됨</p>
+      <button class="btn block" id="btnPlanNow" style="margin-top:6px">지금 가져오기</button>
     </div>
     <div class="panel">
       <h3>분류 관리</h3>
@@ -526,7 +540,10 @@ function renderCal(){
   for (const v of visits) if ((v.date||'').startsWith(calMonth)) (byDay[v.date] = byDay[v.date] || []).push(v);
   const n = Object.values(byDay).reduce((s, a) => s + a.length, 0);
   const places = new Set(Object.values(byDay).flat().map(v => v.name)).size;
-  $('#calSum').textContent = n ? `이번 달 ${n}회 방문 · ${places}곳 · ${Object.keys(byDay).length}일` : '이 달에는 기록이 없습니다';
+  const pDay = plansByDay(calMonth);
+  const np = Object.values(pDay).reduce((s, a) => s + a.length, 0);
+  $('#calSum').textContent = (n ? `이번 달 ${n}회 방문 · ${places}곳 · ${Object.keys(byDay).length}일` : '이 달에는 방문 기록이 없습니다')
+    + (np ? ` · 📌 약속 ${np}` : '');
   const first = new Date(y, m - 1, 1).getDay();
   const last = new Date(y, m, 0).getDate();
   const now = today();
@@ -544,7 +561,8 @@ function renderCal(){
       ${key === now ? `<span class="td">오늘</span>` : ''}
       ${list.length && !photo && key !== now ? `<span class="ic">${catIcon(list[0].cat)}</span>` : ''}
       ${hol && !list.length && key !== now ? `<span class="hn">${esc(hol.replace(' 연휴', '').split(' · ')[0])}</span>` : ''}
-      ${list.length > 1 ? `<span class="k">${list.length}</span>` : ''}</button>`;
+      ${list.length > 1 ? `<span class="k">${list.length}</span>` : ''}
+      ${pDay[key] ? `<span class="pl">📌${esc(pDay[key][0].time || '약속')}${pDay[key].length > 1 ? ' 외' + (pDay[key].length - 1) : ''}</span>` : ''}</button>`;
   }
   $('#cal').innerHTML = html;
   renderCalList(byDay);
@@ -558,10 +576,66 @@ function renderCalList(byDay){
   const [, mm, dd] = calSel.split('-');
   const wd = '일월화수목금토'[new Date(calSel + 'T00:00').getDay()];
   const hol = holidayName(calSel);
+  const pl = plansByDay(calMonth)[calSel] || [];
   $('#calList').innerHTML = `<div class="calDay">${+mm}월 ${+dd}일 (${wd})${hol ? ` <span style="color:#dc2626">${esc(hol)}</span>` : ''} · ${list.length ? list.length + '곳' : '기록 없음'}</div>`
+    + pl.map(planHtml).join('')
     + (list.length ? list.map(itemHtml).join('')
        : `<button class="btn block" id="calAdd">＋ 이날 방문 기록하기</button>`);
 }
+function planHtml(p){
+  const ctx = (p.context || []).join('\n');
+  return `<div class="plan" data-plan="${esc(p.id)}">
+    <div class="pt"><b>📌 ${esc(p.time || '시간 미정')}</b>${esc(p.title)}</div>
+    <div class="pm">카톡 ${esc(p.room)} · ${esc(p.who)} ${esc((p.said || '').slice(5))}: “${esc(p.text)}”${ctx ? '\n' + esc(ctx) : ''}</div>
+    <div class="pb"><button class="btn" data-pa="rename">이름 고치기</button><button class="btn" data-pa="visit">방문으로 기록</button>
+      <button class="btn danger" data-pa="del">지우기</button></div></div>`;
+}
+
+/* ---------- 약속 (PC 카톡 약속 감시 도구에서 가져옴) ---------- */
+// 약속은 기기마다 localStorage 'plans' {id: 약속}. 지우거나 방문으로 바꾼 id 는 'plansGone' 에 남겨 다시 안 들어오게
+let plans = lsGet('plans', {});
+let plansGone = new Set(lsGet('plansGone', []));
+const savePlans = () => { lsSet('plans', plans); lsSet('plansGone', [...plansGone]); };
+function plansByDay(month){
+  const out = {};
+  for (const p of Object.values(plans)) if ((p.date || '').startsWith(month)) (out[p.date] = out[p.date] || []).push(p);
+  for (const a of Object.values(out)) a.sort((x, y) => (x.time || '99').localeCompare(y.time || '99'));
+  return out;
+}
+const PLAN_URL = 'http://127.0.0.1:47321/plans.json';
+const isPhone = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+async function syncPlans(){
+  if (isPhone || !lsGet('planSync', true)) return;      // 폰에선 안 씀(감시 도구는 PC 에서만 돎)
+  let data;
+  try {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 3000);
+    data = await (await fetch(PLAN_URL, {cache: 'no-store', signal: ctl.signal})).json();
+    clearTimeout(t);
+  } catch { return; }                                    // 도구가 안 켜져 있으면 조용히 넘어감
+  let added = 0;
+  for (const p of Object.values(data.plans || {})) {
+    if (!p.id || plans[p.id] || plansGone.has(p.id)) continue;
+    plans[p.id] = p; added++;
+  }
+  lsSet('planLast', data.last_scan || '');
+  if (added) { savePlans(); renderAll(); toast(`카톡 약속 ${added}건을 달력에 넣었습니다`); }
+  const s = $('#planInfo'); if (s) s.textContent = `감시 도구 연결됨 · 마지막 확인 ${data.last_scan || '-'}`;
+}
+$('#calList').addEventListener('click', e => {
+  const b = e.target.closest('[data-pa]'); if (!b) return;
+  e.stopPropagation();
+  const id = b.closest('[data-plan]').dataset.plan, p = plans[id]; if (!p) return;
+  if (b.dataset.pa === 'rename') {
+    const t = prompt('약속 이름(장소)', p.title.replace(/^약속 · /, '')); if (t == null || !t.trim()) return;
+    p.title = t.trim(); savePlans(); renderCal();
+  } else if (b.dataset.pa === 'del') {
+    if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = '한 번 더'; setTimeout(() => { b.dataset.confirm = ''; b.textContent = '지우기'; }, 3000); return; }
+    delete plans[id]; plansGone.add(id); savePlans(); renderCal(); toast('약속을 지웠습니다');
+  } else if (b.dataset.pa === 'visit') {
+    openForm(null, {name: p.title.replace(/^약속 · /, ''), date: p.date, with: p.room,
+      memo: `카톡 약속${p.time ? ' ' + p.time : ''}: ${p.text}`, fromPlan: id});
+  }
+}, true);
 function moveCal(delta){
   const [y, m] = calMonth.split('-').map(Number);
   const d = new Date(y, m - 1 + delta, 1);
@@ -721,7 +795,7 @@ function shrink(file, max = 1280, q = 0.8){
 function openForm(v, preset){
   editing = v ? JSON.parse(JSON.stringify(v)) :
     Object.assign({id:uid(), name:'', date:today(), cat:cats[0], rating:0, addr:'', with:'', memo:'', photos:[], lat:null, lng:null, again:false, created:Date.now()}, preset || {});
-  const again = !!preset?.name;    // 상세의 [다시 방문] — 달력의 [이날 방문 기록하기]는 날짜만 채움
+  const again = !!preset?.name && !preset.fromPlan;    // 상세의 [다시 방문] — 달력의 [이날 방문 기록하기]는 날짜만, 약속의 [방문으로 기록]은 약속 내용을 채움
   $('#fTitle').textContent = v ? '기록 수정' : (again ? '다시 방문' : '새 방문');
   $('#fName').value = editing.name; $('#fDate').value = editing.date;
   fillCatSelect(editing.cat);
@@ -750,7 +824,9 @@ $('#fSave').addEventListener('click', async () => {
   if (!name) { toast('장소 이름을 적어 주세요'); $('#fName').focus(); return; }
   Object.assign(editing, {name, date:$('#fDate').value, cat:$('#fCat').value, addr:$('#fAddr').value.trim(),
     with:$('#fWith').value.trim(), memo:$('#fMemo').value, again:$('#fAgain').checked, updated:Date.now()});
+  const fromPlan = editing.fromPlan; delete editing.fromPlan;
   try { await DB.put(editing); } catch (err) { toast('저장 실패: 저장 공간이 부족할 수 있습니다'); return; }
+  if (fromPlan) { delete plans[fromPlan]; plansGone.add(fromPlan); savePlans(); }     // 약속 → 방문 기록이 되면 약속은 뺌
   const id = editing.id; closeForm(); await reload();
   toast('저장했습니다');
   if (detailId === id) openDetail(id);
@@ -870,7 +946,7 @@ $('#theme').addEventListener('change', () => { lsSet('theme', $('#theme').value)
 $('#sort').value = lsGet('sort', 'date');
 
 $('#btnExport').addEventListener('click', () => {
-  const data = JSON.stringify({app:'visit-log', version:1, exported:new Date().toISOString(), cats, visits});
+  const data = JSON.stringify({app:'visit-log', version:1, exported:new Date().toISOString(), cats, visits, plans, plansGone:[...plansGone]});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([data], {type:'application/json'}));
   a.download = `방문기록_백업_${today()}.json`;
@@ -893,6 +969,9 @@ $('#importFile').addEventListener('change', async e => {
       else if ((v.updated||v.created||0) > (cur.updated||cur.created||0)) { await DB.put(v); updated++; }
     }
     if (Array.isArray(data.cats)) { cats = [...new Set(cats.concat(data.cats))]; lsSet('cats', cats); $('#catEdit').value = cats.join(', '); }
+    for (const id of data.plansGone || []) { plansGone.add(id); delete plans[id]; }
+    for (const p of Object.values(data.plans || {})) if (p?.id && !plansGone.has(p.id)) plans[p.id] = Object.assign({}, plans[p.id], p);
+    savePlans();
     await reload();
     toast(`불러오기 완료: 추가 ${added}건, 갱신 ${updated}건`);
   } catch { toast('백업 파일이 올바르지 않습니다'); }
@@ -900,10 +979,18 @@ $('#importFile').addEventListener('change', async e => {
 
 /* ---------- 시작 ---------- */
 renderAll();
-DB.open().then(reload);
+DB.open().then(reload).then(syncPlans);
+// 카톡 약속: 10분마다·앱으로 돌아올 때 다시 확인(감시 도구 자체는 1시간마다 카톡을 읽음)
+setInterval(syncPlans, 10 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncPlans(); });
+$('#planSync').checked = lsGet('planSync', true);
+$('#planSync').addEventListener('change', () => { lsSet('planSync', $('#planSync').checked); if ($('#planSync').checked) syncPlans(); });
+$('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textContent = '확인 중…'; await syncPlans();
+  if ($('#planInfo').textContent === '확인 중…') $('#planInfo').textContent = '감시 도구에 연결하지 못했습니다(PC에서 도구가 켜져 있는지 확인)'; });
+if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.1.2';
+const APP_VERSION = 'v1.2.0';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 나의 방문기록 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
