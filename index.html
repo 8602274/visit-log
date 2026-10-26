@@ -769,15 +769,12 @@ async function savePlace(nameOnly){
     if (photoPick.length) {
       $('#psSave').disabled = true; $('#psSave').textContent = '사진 받는 중…';
       const got = [];
+      // 원본 → (한 번 더) 원본 → 미리보기 그림 순으로 — 블로그 그림 서버가 가끔 첫 요청을 놓침
+      const one = async url => { const r = await (await fetch(`${TOOL}/imgdata?url=${encodeURIComponent(url)}`)).json(); return r.data ? dataToJpeg(r.data) : null; };
       for (const k of photoPick) {
-        try {
-          const r = await (await fetch(`${TOOL}/imgdata?url=${encodeURIComponent(photoRes[k].image)}`)).json();
-          if (r.data) { got.push(await dataToJpeg(r.data)); continue; }
-        } catch {}
-        try {     // 원본을 못 받으면 미리보기 그림으로
-          const r = await (await fetch(`${TOOL}/imgdata?url=${encodeURIComponent(photoRes[k].thumb)}`)).json();
-          if (r.data) got.push(await dataToJpeg(r.data));
-        } catch {}
+        for (const url of [photoRes[k].image, photoRes[k].image, photoRes[k].thumb]) {
+          try { const j = await one(url); if (j) { got.push(j); break; } } catch {}
+        }
       }
       $('#psSave').disabled = false; $('#psSave').textContent = '이 장소로 저장';
       p.photos = got;
@@ -1158,7 +1155,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.3.0';
+const APP_VERSION = 'v1.3.1';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 나의 방문기록 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
