@@ -309,7 +309,11 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
   </div>
   <div class="body">
     <label class="f">장소 이름 *</label>
-    <input id="fName" list="nameList" placeholder="예: 강릉 초당순두부" autocomplete="off">
+    <div class="tools" style="margin:0">
+      <input id="fName" list="nameList" placeholder="예: 강릉 초당순두부" autocomplete="off">
+      <button class="btn" id="fFind" type="button" style="flex:0 0 auto">🔍 찾기</button>
+    </div>
+    <div class="hint" id="fPlaceInfo" style="margin-top:4px"></div>
     <datalist id="nameList"></datalist>
 
     <div class="row">
@@ -681,7 +685,7 @@ $('#calList').addEventListener('click', e => {
     openForm(null, Object.assign({name: p.title.replace(/^약속 · /, ''), date: p.date, with: p.room,
       memo: `카톡 약속${p.time ? ' ' + p.time : ''}: ${p.text}`, fromPlan: id, photos: (p.photos || []).slice()},
       pl.lat != null ? {lat: pl.lat, lng: pl.lng} : {}, pl.road || pl.addr ? {addr: pl.road || pl.addr} : {},
-      pl.cat ? {cat: catFromKakao(pl.cat)} : {}));
+      pl.cat ? {cat: catFromKakao(pl.cat)} : {}, pl.name ? {place: visitPlace(pl)} : {}));
   }
 }, true);
 
@@ -709,14 +713,20 @@ function catFromKakao(c){
   for (const [k, n] of rules) if (c.includes(k) && pick(n)) return pick(n);
   return cats[0];
 }
+// placeFor = {kind:'plan', id} 약속 카드 · {kind:'form'} 입력 중인 방문 · {kind:'visit', id} 저장된 방문(상세)
 function openPlace(id){
-  placeFor = id; placePick = null; photoPick = [];
   const p = plans[id];
-  $('#psQ').value = (p.place?.name || p.title).replace(/^약속 · /, '');
+  openPlaceFor({kind: 'plan', id}, (p.place?.name || p.title).replace(/^약속 · /, ''), !/^약속 · /.test(p.title) || !!p.place);
+}
+function openPlaceFor(target, q, auto){
+  placeFor = target; placePick = null; photoPick = [];
+  $('#psQ').value = q || '';
   $('#psList').innerHTML = ''; $('#psPhotos').innerHTML = ''; $('#psPhotoBox').style.display = 'none';
   $('#psMsg').textContent = '가게·장소 이름을 넣고 찾기를 누르세요. 지역을 같이 적으면 더 정확합니다(예: 노을 거제).';
+  $('#placeSheet h2').textContent = target.kind === 'plan' ? '약속 장소 찾기' : '방문 장소 찾기';
+  $('#psNameOnly').style.display = target.kind === 'plan' ? '' : 'none';
   $('#placeSheet').classList.add('on'); $('#placeSheet').scrollTop = 0;
-  if (!/^약속 · /.test(p.title) || p.place) searchPlace();
+  if (auto && q) searchPlace();
 }
 function closePlace(){ $('#placeSheet').classList.remove('on'); placeFor = null; }
 async function searchPlace(){
@@ -770,33 +780,59 @@ function dataToJpeg(src, max = 800, q = 0.75){
     img.onerror = rej; img.src = src;
   });
 }
-async function savePlace(nameOnly){
-  const p = plans[placeFor]; if (!p) return closePlace();
-  if (nameOnly) {
-    const t = $('#psQ').value.trim(); if (!t) return toast('이름을 적어 주세요');
-    p.title = t; delete p.place;
-  } else {
-    if (!placePick) return toast('먼저 장소를 고르세요');
-    p.title = placePick.name; p.place = placePick;
-    if (photoPick.length) {
-      $('#psSave').disabled = true; $('#psSave').textContent = '사진 받는 중…';
-      const got = [];
-      // 원본 → (한 번 더) 원본 → 미리보기 그림 순으로 — 블로그 그림 서버가 가끔 첫 요청을 놓침
-      const one = async url => { const r = await (await fetch(`${TOOL}/imgdata?url=${encodeURIComponent(url)}`)).json(); return r.data ? dataToJpeg(r.data) : null; };
-      for (const k of photoPick) {
-        for (const url of [photoRes[k].image, photoRes[k].image, photoRes[k].thumb]) {
-          try { const j = await one(url); if (j) { got.push(j); break; } } catch {}
-        }
-      }
-      $('#psSave').disabled = false; $('#psSave').textContent = '이 장소로 저장';
-      p.photos = got;
-      if (got.length < photoPick.length) toast(`사진 ${photoPick.length - got.length}장은 받지 못했습니다`);
+async function pickedPhotos(){
+  if (!photoPick.length) return [];
+  $('#psSave').disabled = true; $('#psSave').textContent = '사진 받는 중…';
+  const got = [];
+  // 원본 → (한 번 더) 원본 → 미리보기 그림 순으로 — 블로그 그림 서버가 가끔 첫 요청을 놓침
+  const one = async url => { const r = await (await fetch(`${TOOL}/imgdata?url=${encodeURIComponent(url)}`)).json(); return r.data ? dataToJpeg(r.data) : null; };
+  for (const k of photoPick) {
+    for (const url of [photoRes[k].image, photoRes[k].image, photoRes[k].thumb]) {
+      try { const j = await one(url); if (j) { got.push(j); break; } } catch {}
     }
   }
-  p.updated = Date.now();
-  try { savePlans(); } catch { toast('저장 공간이 부족합니다 — 사진을 줄여 주세요'); return; }
-  syncSoon();
-  closePlace(); renderCal(); toast('약속 장소를 저장했습니다');
+  $('#psSave').disabled = false; $('#psSave').textContent = '이 장소로 저장';
+  if (got.length < photoPick.length) toast(`사진 ${photoPick.length - got.length}장은 받지 못했습니다`);
+  return got;
+}
+// 방문 기록에 넣는 장소 정보(전화·업종·카카오맵 링크 — 주소·위치는 기록의 addr·lat·lng 로)
+const visitPlace = pp => ({id: pp.id, name: pp.name, phone: pp.phone, cat: pp.cat, url: pp.url, road: pp.road, addr: pp.addr});
+async function savePlace(nameOnly){
+  const t = placeFor; if (!t) return closePlace();
+  if (t.kind === 'plan') {
+    const p = plans[t.id]; if (!p) return closePlace();
+    if (nameOnly) {
+      const name = $('#psQ').value.trim(); if (!name) return toast('이름을 적어 주세요');
+      p.title = name; delete p.place;
+    } else {
+      if (!placePick) return toast('먼저 장소를 고르세요');
+      p.title = placePick.name; p.place = placePick;
+      if (photoPick.length) p.photos = await pickedPhotos();
+    }
+    p.updated = Date.now();
+    try { savePlans(); } catch { toast('저장 공간이 부족합니다 — 사진을 줄여 주세요'); return; }
+    syncSoon();
+    closePlace(); renderCal(); toast('약속 장소를 저장했습니다');
+    return;
+  }
+  if (!placePick) return toast('먼저 장소를 고르세요');
+  const pp = placePick, photos = await pickedPhotos();
+  if (t.kind === 'form') {           // 입력 중인 방문 — 칸을 채우고 폼으로 돌아감(저장은 폼의 [저장])
+    if (!editing) return closePlace();
+    $('#fName').value = pp.name;
+    $('#fAddr').value = pp.road || pp.addr || $('#fAddr').value;
+    fillCatSelect(catFromKakao(pp.cat || ''));
+    setPick(pp.lat, pp.lng); if (pickMap) pickMap.setView([pp.lat, pp.lng], 16);
+    editing.place = visitPlace(pp); showFormPlace();
+    if (photos.length) { editing.photos = editing.photos.concat(photos); renderPhotos(); }
+    closePlace(); toast('장소 정보를 채웠습니다 — [저장]을 누르세요');
+    return;
+  }
+  const v = visits.find(x => x.id === t.id); if (!v) return closePlace();
+  const nv = Object.assign({}, v, {place: visitPlace(pp), lat: pp.lat, lng: pp.lng, addr: v.addr || pp.road || pp.addr || '',
+    photos: (v.photos || []).concat(photos), updated: Date.now()});
+  try { await DB.put(nv); } catch { toast('저장 실패: 저장 공간이 부족할 수 있습니다'); return; }
+  closePlace(); await reload(); openDetail(v.id); syncSoon(); toast('지도·장소 정보를 넣었습니다');
 }
 $('#psGo').addEventListener('click', searchPlace);
 $('#psQ').addEventListener('keydown', e => { if (e.key === 'Enter') searchPlace(); });
@@ -980,11 +1016,22 @@ function openForm(v, preset){
   $('#fAddr').value = editing.addr; $('#fWith').value = editing.with; $('#fMemo').value = editing.memo;
   $('#fAgain').checked = !!editing.again;
   $('#fDelete').style.display = v ? '' : 'none';
-  renderRate(); renderPhotos();
+  renderRate(); renderPhotos(); showFormPlace();
   $('#formSheet').classList.add('on'); $('#formSheet').scrollTop = 0;
   initPickMap();
   if (!v && !again) setTimeout(() => $('#fName').focus(), 100);
 }
+function showFormPlace(){
+  const p = editing?.place;
+  $('#fPlaceInfo').textContent = p ? `🔗 ${p.name}${p.cat ? ' · ' + p.cat : ''}${p.phone ? ' · ' + p.phone : ''}` : '';
+}
+$('#fFind').addEventListener('click', () => {
+  if (!editing) return;
+  const q = $('#fName').value.trim();
+  openPlaceFor({kind: 'form'}, q, !!q);
+});
+// 이름을 손으로 바꾸면 이전에 찾은 가게 연결은 끊음
+$('#fName').addEventListener('input', () => { if (editing?.place && $('#fName').value.trim() !== editing.place.name) { delete editing.place; showFormPlace(); } });
 // 이전에 간 곳 이름을 고르면 분류·주소·위치를 채워 줌
 $('#fName').addEventListener('change', () => {
   const prev = visits.filter(x => x.name === $('#fName').value.trim()).sort((a,b) => b.created - a.created)[0];
@@ -1031,13 +1078,18 @@ function openDetail(id){
     <div class="dMeta">
       📅 ${esc(v.date||'')} ${hist.length > 1 ? `(${visitNo(v)}번째 방문)` : ''}<br>
       🏷️ ${esc(catName(v.cat))}
+      ${v.place?.cat ? `<br>🍽️ ${esc(v.place.cat)}` : ''}
       ${v.addr ? `<br>📌 ${esc(v.addr)}` : ''}
+      ${v.place?.phone ? `<br>📞 <a href="tel:${esc(v.place.phone)}" style="color:var(--accent)">${esc(v.place.phone)}</a>` : ''}
       ${v.with ? `<br>👥 ${esc(v.with)}` : ''}
     </div>
     ${v.memo ? `<div class="memo">${esc(v.memo)}</div>` : ''}
     ${v.lat != null ? `<div id="dMap"></div>
-      <div class="row"><a class="btn" href="https://map.kakao.com/link/map/${encodeURIComponent(v.name)},${v.lat},${v.lng}" target="_blank" rel="noopener">카카오맵</a>
+      <div class="row">${v.place?.url ? `<a class="btn" href="${esc(v.place.url)}" target="_blank" rel="noopener">가게 정보</a>` : ''}
+      <a class="btn" href="https://map.kakao.com/link/map/${encodeURIComponent(v.name)},${v.lat},${v.lng}" target="_blank" rel="noopener">카카오맵</a>
+      <a class="btn" href="https://map.kakao.com/link/to/${encodeURIComponent(v.name)},${v.lat},${v.lng}" target="_blank" rel="noopener">길찾기</a>
       <a class="btn" href="https://map.naver.com/p/search/${encodeURIComponent(v.addr || v.name)}?c=${v.lng},${v.lat},16,0,0,0,dh" target="_blank" rel="noopener">네이버지도</a></div>` : ''}
+    ${!v.place ? `<div style="height:10px"></div><button class="btn block" id="dFind">🔍 장소 찾아 ${v.lat == null ? '지도·' : ''}가게 정보 넣기</button>` : ''}
     ${hist.length > 1 ? `<div class="panel" style="margin-top:14px"><h3>이곳 방문 이력 (${hist.length}회)</h3><div class="history">
       ${hist.map(h => h.id === v.id ? `<b>• ${esc(h.date)} ${starStr(h.rating)}</b>` : `<a data-open="${h.id}">• ${esc(h.date)} ${starStr(h.rating)}</a>`).join('<br>')}</div></div>` : ''}
     <div style="height:14px"></div>
@@ -1050,7 +1102,8 @@ function openDetail(id){
     dMap.setView([v.lat, v.lng], 16); L.marker([v.lat, v.lng]).addTo(dMap);
     setTimeout(() => dMap.invalidateSize(), 60);
   }
-  $('#dAgain').onclick = () => openForm(null, {name:v.name, cat:v.cat, addr:v.addr, lat:v.lat, lng:v.lng, again:v.again});
+  $('#dAgain').onclick = () => openForm(null, {name:v.name, cat:v.cat, addr:v.addr, lat:v.lat, lng:v.lng, again:v.again, place:v.place});
+  const df = $('#dFind'); if (df) df.onclick = () => openPlaceFor({kind: 'visit', id: v.id}, v.name, true);
 }
 function closeDetail(){ $('#detailSheet').classList.remove('on'); detailId = null; }
 $('#dClose').addEventListener('click', closeDetail);
@@ -1072,9 +1125,9 @@ document.querySelectorAll('.sheet, #viewer').forEach(el => sheetObserver.observe
 window.addEventListener('popstate', () => {
   sheetObserver.depth = Math.max(0, (sheetObserver.depth || 1) - 1);
   if ($('#viewer').classList.contains('on')) $('#viewer').classList.remove('on');
+  else if ($('#placeSheet').classList.contains('on')) closePlace();     // 장소 찾기는 폼·상세 위에 뜨므로 먼저
   else if ($('#formSheet').classList.contains('on')) closeForm();
   else if ($('#detailSheet').classList.contains('on')) closeDetail();
-  else if ($('#placeSheet').classList.contains('on')) closePlace();
 });
 
 /* ---------- 통계 ---------- */
@@ -1312,7 +1365,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.4.0';
+const APP_VERSION = 'v1.5.0';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 나의 방문기록 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
