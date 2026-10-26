@@ -73,6 +73,30 @@ textarea{min-height:90px;resize:vertical}
 #bigMap{height:calc(100vh - 170px);border-radius:14px;overflow:hidden}
 .leaflet-popup-content{font-family:inherit}
 
+/* 달력 */
+.calHead{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.calHead h2{flex:1;margin:0;font-size:18px;text-align:center}
+.calHead button{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:10px;
+  min-width:44px;height:40px;font:inherit;font-size:18px;cursor:pointer}
+.calHead .today{font-size:13px;padding:0 10px}
+.calSum{text-align:center;color:var(--sub);font-size:13px;margin:-4px 0 10px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;background:var(--card);border-radius:14px;padding:8px;box-shadow:var(--shadow)}
+.cal .wd{text-align:center;font-size:12px;color:var(--sub);padding:4px 0;font-weight:600}
+.cal .wd.sun,.cal .d.sun .n{color:#dc2626}.cal .wd.sat,.cal .d.sat .n{color:#2563eb}
+.cal .d{position:relative;aspect-ratio:1;border-radius:10px;border:0;background:none;padding:0;font:inherit;color:var(--text);
+  cursor:pointer;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:flex-start}
+.cal .d.out{visibility:hidden}
+.cal .d .n{font-size:13px;margin-top:4px;position:relative;z-index:2;font-weight:600}
+.cal .d.has{background:var(--accent-soft)}
+.cal .d.has.ph .n{color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+.cal .d img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.85}
+.cal .d .ic{font-size:18px;line-height:1;margin-top:2px;position:relative;z-index:2}
+.cal .d .k{position:absolute;right:3px;bottom:3px;z-index:2;background:var(--accent);color:#fff;border-radius:8px;
+  font-size:10px;font-weight:700;padding:0 5px;line-height:15px}
+.cal .d.now{box-shadow:inset 0 0 0 2px var(--accent)}
+.cal .d.sel{box-shadow:inset 0 0 0 3px var(--star)}
+.calDay{font-size:15px;font-weight:700;margin:16px 2px 8px}
+
 /* 통계 */
 .statGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
 .stat{background:var(--card);border-radius:14px;padding:14px 10px;text-align:center;box-shadow:var(--shadow)}
@@ -170,6 +194,19 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
     <div id="bigMap"></div>
   </section>
 
+  <!-- 달력 -->
+  <section class="tab" id="tab-cal">
+    <div class="calHead">
+      <button id="calPrev" aria-label="이전 달">‹</button>
+      <h2 id="calTitle"></h2>
+      <button id="calNext" aria-label="다음 달">›</button>
+      <button id="calToday" class="today">오늘</button>
+    </div>
+    <div class="calSum" id="calSum"></div>
+    <div class="cal" id="cal"></div>
+    <div id="calList"></div>
+  </section>
+
   <!-- 통계 -->
   <section class="tab" id="tab-stat">
     <div id="stats"></div>
@@ -222,6 +259,7 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
 <nav>
   <button data-tab="list" class="on"><i>📋</i>목록</button>
   <button data-tab="map"><i>🗺️</i>지도</button>
+  <button data-tab="cal"><i>📅</i>달력</button>
   <button data-tab="stat"><i>📊</i>통계</button>
   <button data-tab="set"><i>⚙️</i>설정</button>
 </nav>
@@ -354,6 +392,7 @@ function renderAll(){
   renderChips(); renderList();
   if ($('#tab-map').classList.contains('on')) renderBigMap();
   if ($('#tab-stat').classList.contains('on')) renderStats();
+  if ($('#tab-cal').classList.contains('on')) renderCal();
   $('#nameList').innerHTML = [...new Set(visits.map(v => v.name))].map(n => `<option value="${esc(n)}">`).join('');
 }
 const visitNo = v => visits.filter(x => x.name === v.name && (x.date < v.date || (x.date === v.date && x.created <= v.created))).length;
@@ -403,26 +442,104 @@ function renderList(){
       const m = (v.date||'').slice(0,7);
       if (m !== last) { html += `<div class="month">${m ? m.replace('-','년 ') + '월' : '날짜 없음'}</div>`; last = m; }
     }
-    const n = sameCount(v.name);
-    html += `<div class="item" data-id="${v.id}">
+    html += itemHtml(v);
+  }
+  $('#list').innerHTML = html;
+}
+function itemHtml(v){
+  const n = sameCount(v.name);
+  return `<div class="item" data-id="${v.id}">
       <div class="thumb">${v.photos?.length ? `<img src="${v.photos[0]}" alt="">` : catIcon(v.cat)}</div>
       <div class="info">
         <div class="name">${esc(v.name)}${n > 1 ? `<span class="badge">${visitNo(v)}/${n}회</span>` : ''}${v.again ? ' 💚' : ''}</div>
         <div class="meta">${esc(v.date||'')} · ${esc(catName(v.cat))}${v.addr ? ' · ' + esc(v.addr) : ''}</div>
         ${v.rating ? `<div class="stars">${starStr(v.rating)}</div>` : ''}
       </div></div>`;
-  }
-  $('#list').innerHTML = html;
 }
 $('#list').addEventListener('click', e => { const it = e.target.closest('.item'); if (it) openDetail(it.dataset.id); });
+
+/* ---------- 달력 ---------- */
+// 보고 있는 달(YYYY-MM)·고른 날(YYYY-MM-DD) — 마지막에 본 달은 기억
+let calMonth = lsGet('calMonth', '') || today().slice(0,7);
+let calSel = '';
+function renderCal(){
+  const [y, m] = calMonth.split('-').map(Number);
+  $('#calTitle').textContent = `${y}년 ${m}월`;
+  const byDay = {};
+  for (const v of visits) if ((v.date||'').startsWith(calMonth)) (byDay[v.date] = byDay[v.date] || []).push(v);
+  const n = Object.values(byDay).reduce((s, a) => s + a.length, 0);
+  const places = new Set(Object.values(byDay).flat().map(v => v.name)).size;
+  $('#calSum').textContent = n ? `이번 달 ${n}회 방문 · ${places}곳 · ${Object.keys(byDay).length}일` : '이 달에는 기록이 없습니다';
+  const first = new Date(y, m - 1, 1).getDay();
+  const last = new Date(y, m, 0).getDate();
+  const now = today();
+  let html = ['일','월','화','수','목','금','토'].map((w, i) => `<div class="wd ${i===0?'sun':i===6?'sat':''}">${w}</div>`).join('');
+  for (let i = 0; i < first; i++) html += `<div class="d out"></div>`;
+  for (let d = 1; d <= last; d++) {
+    const key = `${calMonth}-${String(d).padStart(2,'0')}`;
+    const list = (byDay[key] || []).sort((a,b) => a.created - b.created);
+    const wd = (first + d - 1) % 7;
+    const photo = list.find(v => v.photos?.length);
+    const cls = ['d', wd===0?'sun':wd===6?'sat':'', list.length?'has':'', photo?'ph':'', key===now?'now':'', key===calSel?'sel':''].join(' ');
+    html += `<button class="${cls}" data-day="${key}" aria-label="${m}월 ${d}일 ${list.length}건">
+      ${photo ? `<img src="${photo.photos[0]}" alt="">` : ''}<span class="n">${d}</span>
+      ${list.length && !photo ? `<span class="ic">${catIcon(list[0].cat)}</span>` : ''}
+      ${list.length > 1 ? `<span class="k">${list.length}</span>` : ''}</button>`;
+  }
+  $('#cal').innerHTML = html;
+  renderCalList(byDay);
+}
+function renderCalList(byDay){
+  if (!calSel || !calSel.startsWith(calMonth)) {
+    $('#calList').innerHTML = `<div class="hint" style="text-align:center;margin-top:14px">날짜를 누르면 그날 간 곳이 보입니다.</div>`;
+    return;
+  }
+  const list = (byDay[calSel] || []).sort((a,b) => a.created - b.created);
+  const [, mm, dd] = calSel.split('-');
+  const wd = '일월화수목금토'[new Date(calSel + 'T00:00').getDay()];
+  $('#calList').innerHTML = `<div class="calDay">${+mm}월 ${+dd}일 (${wd}) · ${list.length ? list.length + '곳' : '기록 없음'}</div>`
+    + (list.length ? list.map(itemHtml).join('')
+       : `<button class="btn block" id="calAdd">＋ 이날 방문 기록하기</button>`);
+}
+function moveCal(delta){
+  const [y, m] = calMonth.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  calMonth = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  lsSet('calMonth', calMonth); renderCal();
+}
+$('#calPrev').addEventListener('click', () => moveCal(-1));
+$('#calNext').addEventListener('click', () => moveCal(1));
+$('#calToday').addEventListener('click', () => { calMonth = today().slice(0,7); calSel = today(); lsSet('calMonth', calMonth); renderCal(); });
+$('#cal').addEventListener('click', e => {
+  const b = e.target.closest('[data-day]'); if (!b) return;
+  calSel = calSel === b.dataset.day ? '' : b.dataset.day; renderCal();
+  if (calSel) $('#calList').scrollIntoView({behavior:'smooth', block:'nearest'});
+});
+$('#calList').addEventListener('click', e => {
+  if (e.target.closest('#calAdd')) return openForm(null, {date:calSel});
+  const it = e.target.closest('.item'); if (it) openDetail(it.dataset.id);
+});
+// 달력 위에서 좌우로 밀면 이전·다음 달
+(() => {
+  let x0 = null, y0 = null;
+  const el = $('#cal');
+  el.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, {passive:true});
+  el.addEventListener('touchend', e => {
+    if (x0 == null) return;
+    const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
+    x0 = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) moveCal(dx < 0 ? 1 : -1);
+  }, {passive:true});
+})();
 
 /* ---------- 탭 ---------- */
 document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
 function showTab(t){
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   document.querySelectorAll('.tab').forEach(s => s.classList.toggle('on', s.id === 'tab-' + t));
-  $('#fab').style.display = (t === 'list' || t === 'map') ? '' : 'none';
+  $('#fab').style.display = (t === 'list' || t === 'map' || t === 'cal') ? '' : 'none';
   if (t === 'map') renderBigMap();
+  if (t === 'cal') renderCal();
   if (t === 'stat') renderStats();
   window.scrollTo(0,0);
 }
@@ -543,7 +660,8 @@ function shrink(file, max = 1280, q = 0.8){
 function openForm(v, preset){
   editing = v ? JSON.parse(JSON.stringify(v)) :
     Object.assign({id:uid(), name:'', date:today(), cat:cats[0], rating:0, addr:'', with:'', memo:'', photos:[], lat:null, lng:null, again:false, created:Date.now()}, preset || {});
-  $('#fTitle').textContent = v ? '기록 수정' : (preset ? '다시 방문' : '새 방문');
+  const again = !!preset?.name;    // 상세의 [다시 방문] — 달력의 [이날 방문 기록하기]는 날짜만 채움
+  $('#fTitle').textContent = v ? '기록 수정' : (again ? '다시 방문' : '새 방문');
   $('#fName').value = editing.name; $('#fDate').value = editing.date;
   fillCatSelect(editing.cat);
   $('#fAddr').value = editing.addr; $('#fWith').value = editing.with; $('#fMemo').value = editing.memo;
@@ -552,7 +670,7 @@ function openForm(v, preset){
   renderRate(); renderPhotos();
   $('#formSheet').classList.add('on'); $('#formSheet').scrollTop = 0;
   initPickMap();
-  if (!v && !preset) setTimeout(() => $('#fName').focus(), 100);
+  if (!v && !again) setTimeout(() => $('#fName').focus(), 100);
 }
 // 이전에 간 곳 이름을 고르면 분류·주소·위치를 채워 줌
 $('#fName').addEventListener('change', () => {
@@ -563,7 +681,8 @@ $('#fName').addEventListener('change', () => {
   if (editing.lat == null && prev.lat != null) { setPick(prev.lat, prev.lng); if (pickMap) pickMap.setView([prev.lat, prev.lng], 16); }
 });
 function closeForm(){ $('#formSheet').classList.remove('on'); editing = null; }
-$('#fab').addEventListener('click', () => openForm());
+// 달력에서 날짜를 골라 둔 채 ＋를 누르면 그 날짜로
+$('#fab').addEventListener('click', () => openForm(null, $('#tab-cal').classList.contains('on') && calSel ? {date:calSel} : undefined));
 $('#fCancel').addEventListener('click', closeForm);
 $('#fSave').addEventListener('click', async () => {
   const name = $('#fName').value.trim();
@@ -723,7 +842,7 @@ renderAll();
 DB.open().then(reload);
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.0.1';
+const APP_VERSION = 'v1.1.0';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 나의 방문기록 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
