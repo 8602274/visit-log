@@ -96,6 +96,11 @@ textarea{min-height:90px;resize:vertical}
 .cal .d .hn{font-size:9px;color:#dc2626;line-height:1.1;margin-top:2px;padding:0 1px;position:relative;z-index:2;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .cal .d.now{box-shadow:inset 0 0 0 2px var(--accent)}
+/* 오늘 — 숫자를 크게, 초록 동그라미 안에 + 밑에 '오늘' */
+.cal .d.now .n{font-size:17px;font-weight:800;color:#fff !important;background:var(--accent);border-radius:50%;
+  width:30px;height:30px;line-height:30px;margin-top:3px;text-shadow:none !important}
+.cal .d.now .td{font-size:10px;font-weight:700;color:var(--accent);margin-top:1px;position:relative;z-index:2}
+.cal .d.now.ph .td{color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.8)}
 .cal .d.sel{box-shadow:inset 0 0 0 3px var(--star)}
 .calDay{font-size:15px;font-weight:700;margin:16px 2px 8px}
 
@@ -536,8 +541,9 @@ function renderCal(){
     const cls = ['d', wd===0||hol?'sun':wd===6?'sat':'', list.length?'has':'', photo?'ph':'', key===now?'now':'', key===calSel?'sel':''].join(' ');
     html += `<button class="${cls}" data-day="${key}" title="${esc(hol)}" aria-label="${m}월 ${d}일${hol ? ' ' + esc(hol) : ''} ${list.length}건">
       ${photo ? `<img src="${photo.photos[0]}" alt="">` : ''}<span class="n">${d}</span>
-      ${list.length && !photo ? `<span class="ic">${catIcon(list[0].cat)}</span>` : ''}
-      ${hol && !list.length ? `<span class="hn">${esc(hol.replace(' 연휴', '').split(' · ')[0])}</span>` : ''}
+      ${key === now ? `<span class="td">오늘</span>` : ''}
+      ${list.length && !photo && key !== now ? `<span class="ic">${catIcon(list[0].cat)}</span>` : ''}
+      ${hol && !list.length && key !== now ? `<span class="hn">${esc(hol.replace(' 연휴', '').split(' · ')[0])}</span>` : ''}
       ${list.length > 1 ? `<span class="k">${list.length}</span>` : ''}</button>`;
   }
   $('#cal').innerHTML = html;
@@ -897,7 +903,7 @@ renderAll();
 DB.open().then(reload);
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.1.1';
+const APP_VERSION = 'v1.1.2';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 나의 방문기록 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
