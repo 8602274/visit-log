@@ -109,7 +109,11 @@ textarea{min-height:90px;resize:vertical}
 .plan{background:var(--card);border-radius:14px;padding:12px;margin-bottom:8px;box-shadow:var(--shadow);border-left:5px solid #7c3aed}
 .plan .pt{font-weight:700}.plan .pt b{color:#7c3aed;margin-right:6px}
 .plan .pm{font-size:13px;color:var(--sub);margin-top:4px;line-height:1.6;white-space:pre-wrap;word-break:break-all}
-.plan .pb{display:flex;gap:6px;margin-top:8px}.plan .pb .btn{padding:7px 10px;font-size:13px}
+.plan .pb{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}.plan .pb .btn{padding:7px 10px;font-size:13px}
+.plan .pm a{color:var(--accent);text-decoration:none}
+.pph{display:flex;gap:6px;margin-top:8px;overflow-x:auto}.pph img{width:96px;height:96px;object-fit:cover;border-radius:8px;flex:none;cursor:pointer}
+.item.ps.on{box-shadow:inset 0 0 0 3px #7c3aed}
+#psPhotos .ph{cursor:pointer}#psPhotos .ph.on{box-shadow:0 0 0 3px #7c3aed;transform:scale(.94)}
 
 /* 통계 */
 .statGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
@@ -350,6 +354,33 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
   <div class="body" id="dBody"></div>
 </div>
 
+<!-- 장소 찾기 시트(약속) -->
+<div class="sheet" id="placeSheet">
+  <div class="top">
+    <button id="psClose">‹ 닫기</button>
+    <h2>약속 장소 찾기</h2>
+    <span style="width:52px"></span>
+  </div>
+  <div class="body">
+    <div class="tools">
+      <input id="psQ" type="search" placeholder="예: 노을 거제" autocomplete="off">
+      <button class="btn primary" id="psGo" style="flex:0 0 auto">찾기</button>
+    </div>
+    <div class="hint" id="psMsg"></div>
+    <div id="psList" style="margin-top:8px"></div>
+    <div id="psPhotoBox" style="display:none">
+      <label class="f">사진</label>
+      <div class="hint" id="psPhotoMsg"></div>
+      <div class="photos" id="psPhotos"></div>
+    </div>
+    <div style="height:14px"></div>
+    <button class="btn primary block" id="psSave">이 장소로 저장</button>
+    <div style="height:8px"></div>
+    <button class="btn block" id="psNameOnly">검색 없이 이름만 저장</button>
+    <div style="height:40px"></div>
+  </div>
+</div>
+
 <div id="viewer"><img alt=""></div>
 <div class="toast" id="toast"></div>
 
@@ -584,10 +615,13 @@ function renderCalList(byDay){
 }
 function planHtml(p){
   const ctx = (p.context || []).join('\n');
+  const pl = p.place;
   return `<div class="plan" data-plan="${esc(p.id)}">
     <div class="pt"><b>📌 ${esc(p.time || '시간 미정')}</b>${esc(p.title)}</div>
+    ${pl ? `<div class="pm">${pl.cat ? '🏷️ ' + esc(pl.cat) + '\n' : ''}📍 ${esc(pl.road || pl.addr || '')}${pl.phone ? '\n📞 <a href="tel:' + esc(pl.phone) + '">' + esc(pl.phone) + '</a>' : ''}${pl.url ? '\n<a href="' + esc(pl.url) + '" target="_blank" rel="noopener">카카오맵에서 보기 ›</a>' : ''}</div>` : ''}
+    ${p.photos?.length ? `<div class="pph">${p.photos.map(s => `<img src="${s}" alt="" data-view>`).join('')}</div>` : ''}
     <div class="pm">카톡 ${esc(p.room)} · ${esc(p.who)} ${esc((p.said || '').slice(5))}: “${esc(p.text)}”${ctx ? '\n' + esc(ctx) : ''}</div>
-    <div class="pb"><button class="btn" data-pa="rename">이름 고치기</button><button class="btn" data-pa="visit">방문으로 기록</button>
+    <div class="pb"><button class="btn" data-pa="place">🔍 장소 찾기</button><button class="btn" data-pa="visit">방문으로 기록</button>
       <button class="btn danger" data-pa="del">지우기</button></div></div>`;
 }
 
@@ -625,17 +659,150 @@ $('#calList').addEventListener('click', e => {
   const b = e.target.closest('[data-pa]'); if (!b) return;
   e.stopPropagation();
   const id = b.closest('[data-plan]').dataset.plan, p = plans[id]; if (!p) return;
-  if (b.dataset.pa === 'rename') {
-    const t = prompt('약속 이름(장소)', p.title.replace(/^약속 · /, '')); if (t == null || !t.trim()) return;
-    p.title = t.trim(); savePlans(); renderCal();
+  if (b.dataset.pa === 'place') {
+    openPlace(id);
   } else if (b.dataset.pa === 'del') {
     if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = '한 번 더'; setTimeout(() => { b.dataset.confirm = ''; b.textContent = '지우기'; }, 3000); return; }
     delete plans[id]; plansGone.add(id); savePlans(); renderCal(); toast('약속을 지웠습니다');
   } else if (b.dataset.pa === 'visit') {
-    openForm(null, {name: p.title.replace(/^약속 · /, ''), date: p.date, with: p.room,
-      memo: `카톡 약속${p.time ? ' ' + p.time : ''}: ${p.text}`, fromPlan: id});
+    const pl = p.place || {};
+    openForm(null, Object.assign({name: p.title.replace(/^약속 · /, ''), date: p.date, with: p.room,
+      memo: `카톡 약속${p.time ? ' ' + p.time : ''}: ${p.text}`, fromPlan: id, photos: (p.photos || []).slice()},
+      pl.lat != null ? {lat: pl.lat, lng: pl.lng} : {}, pl.road || pl.addr ? {addr: pl.road || pl.addr} : {},
+      pl.cat ? {cat: catFromKakao(pl.cat)} : {}));
   }
 }, true);
+
+/* ---------- 장소 찾기 (카카오 장소 검색 + PC 도구의 사진 검색) ---------- */
+// JavaScript 키는 카카오 개발자 사이트에 등록한 주소(8602274.github.io·localhost)에서만 작동 — 공개돼도 됨
+const KAKAO_JS_KEY = '13d9ca682c97b4376800f0bfb835f273';
+const TOOL = 'http://127.0.0.1:47321';
+let kakaoP = null, placeFor = null, placePick = null, photoPick = [];
+function kakaoReady(){
+  if (window.kakao?.maps?.services) return Promise.resolve();
+  if (kakaoP) return kakaoP;
+  kakaoP = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JS_KEY}&libraries=services&autoload=false`;
+    s.onload = () => { try { kakao.maps.load(res); } catch (e) { rej(e); } };
+    s.onerror = () => { kakaoP = null; rej(new Error('load')); };
+    document.head.appendChild(s);
+  });
+  return kakaoP;
+}
+// 카카오 업종 → 내 분류
+function catFromKakao(c){
+  const pick = k => cats.find(x => catName(x).includes(k));
+  const rules = [['카페','카페'],['음식점','맛집'],['숙박','숙소'],['관광','명소'],['명소','명소'],['종교','성지'],['성당','성지'],['쇼핑','쇼핑'],['백화점','쇼핑'],['마트','쇼핑']];
+  for (const [k, n] of rules) if (c.includes(k) && pick(n)) return pick(n);
+  return cats[0];
+}
+function openPlace(id){
+  placeFor = id; placePick = null; photoPick = [];
+  const p = plans[id];
+  $('#psQ').value = (p.place?.name || p.title).replace(/^약속 · /, '');
+  $('#psList').innerHTML = ''; $('#psPhotos').innerHTML = ''; $('#psPhotoBox').style.display = 'none';
+  $('#psMsg').textContent = '가게·장소 이름을 넣고 찾기를 누르세요. 지역을 같이 적으면 더 정확합니다(예: 노을 거제).';
+  $('#placeSheet').classList.add('on'); $('#placeSheet').scrollTop = 0;
+  if (!/^약속 · /.test(p.title) || p.place) searchPlace();
+}
+function closePlace(){ $('#placeSheet').classList.remove('on'); placeFor = null; }
+async function searchPlace(){
+  const q = $('#psQ').value.trim(); if (!q) return;
+  $('#psMsg').textContent = '찾는 중…'; $('#psList').innerHTML = '';
+  try { await kakaoReady(); }
+  catch { $('#psMsg').textContent = '카카오 장소 검색을 불러오지 못했습니다(인터넷 연결 확인). 아래 [이름만 저장]은 됩니다.'; return; }
+  new kakao.maps.services.Places().keywordSearch(q, (data, status) => {
+    if (status !== kakao.maps.services.Status.OK || !data.length) {
+      $('#psMsg').textContent = status === kakao.maps.services.Status.ZERO_RESULT ? '찾은 장소가 없습니다. 이름이나 지역을 바꿔 보세요.' : '검색하지 못했습니다(' + status + ').';
+      return;
+    }
+    placeRes = data;
+    $('#psMsg').textContent = `${data.length}곳 — 맞는 곳을 누르세요`;
+    $('#psList').innerHTML = data.map((d, i) => `<div class="item ps" data-i="${i}">
+      <div class="thumb">${catIcon(catFromKakao(d.category_name || ''))}</div>
+      <div class="info"><div class="name">${esc(d.place_name)}</div>
+        <div class="meta">${esc((d.category_name || '').split(' > ').slice(-1)[0])} · ${esc(d.road_address_name || d.address_name)}</div>
+        ${d.phone ? `<div class="meta">📞 ${esc(d.phone)}</div>` : ''}</div></div>`).join('');
+  }, {size: 15});
+}
+let placeRes = [];
+async function pickPlace(i){
+  const d = placeRes[i]; if (!d) return;
+  placePick = {id: d.id, name: d.place_name, addr: d.address_name, road: d.road_address_name, phone: d.phone,
+    cat: (d.category_name || '').split(' > ').slice(-2).join(' > '), lat: +(+d.y).toFixed(6), lng: +(+d.x).toFixed(6), url: d.place_url};
+  document.querySelectorAll('#psList .ps').forEach(el => el.classList.toggle('on', +el.dataset.i === i));
+  photoPick = [];
+  $('#psPhotoBox').style.display = '';
+  $('#psPhotos').innerHTML = '';
+  if (isPhone) { $('#psPhotoMsg').textContent = '사진 검색은 PC에서만 됩니다(카톡 약속 감시 도구 사용). 장소 정보만 저장할 수 있습니다.'; return; }
+  $('#psPhotoMsg').textContent = '사진 찾는 중…';
+  const region = (d.address_name || '').split(' ').slice(0, 2).join(' ');
+  try {
+    const r = await (await fetch(`${TOOL}/images?q=${encodeURIComponent(d.place_name + ' ' + region)}`, {cache: 'no-store'})).json();
+    if (r.error) throw new Error(r.error);
+    photoRes = r.images || [];
+    $('#psPhotoMsg').textContent = photoRes.length ? '넣을 사진을 누르세요(3장까지). 블로그·사이트 사진이라 다른 곳일 수도 있으니 보고 고르세요.' : '찾은 사진이 없습니다.';
+    $('#psPhotos').innerHTML = photoRes.map((m, k) => `<div class="ph" data-k="${k}"><img src="${esc(m.thumb)}" alt="" referrerpolicy="no-referrer" loading="lazy"></div>`).join('');
+  } catch { $('#psPhotoMsg').textContent = 'PC의 카톡 약속 감시 도구에 연결하지 못해 사진은 못 찾았습니다. 장소 정보만 저장할 수 있습니다.'; }
+}
+let photoRes = [];
+function dataToJpeg(src, max = 800, q = 0.75){
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); res(c.toDataURL('image/jpeg', q));
+    };
+    img.onerror = rej; img.src = src;
+  });
+}
+async function savePlace(nameOnly){
+  const p = plans[placeFor]; if (!p) return closePlace();
+  if (nameOnly) {
+    const t = $('#psQ').value.trim(); if (!t) return toast('이름을 적어 주세요');
+    p.title = t; delete p.place;
+  } else {
+    if (!placePick) return toast('먼저 장소를 고르세요');
+    p.title = placePick.name; p.place = placePick;
+    if (photoPick.length) {
+      $('#psSave').disabled = true; $('#psSave').textContent = '사진 받는 중…';
+      const got = [];
+      for (const k of photoPick) {
+        try {
+          const r = await (await fetch(`${TOOL}/imgdata?url=${encodeURIComponent(photoRes[k].image)}`)).json();
+          if (r.data) { got.push(await dataToJpeg(r.data)); continue; }
+        } catch {}
+        try {     // 원본을 못 받으면 미리보기 그림으로
+          const r = await (await fetch(`${TOOL}/imgdata?url=${encodeURIComponent(photoRes[k].thumb)}`)).json();
+          if (r.data) got.push(await dataToJpeg(r.data));
+        } catch {}
+      }
+      $('#psSave').disabled = false; $('#psSave').textContent = '이 장소로 저장';
+      p.photos = got;
+      if (got.length < photoPick.length) toast(`사진 ${photoPick.length - got.length}장은 받지 못했습니다`);
+    }
+  }
+  try { savePlans(); } catch { toast('저장 공간이 부족합니다 — 사진을 줄여 주세요'); return; }
+  closePlace(); renderCal(); toast('약속 장소를 저장했습니다');
+}
+$('#psGo').addEventListener('click', searchPlace);
+$('#psQ').addEventListener('keydown', e => { if (e.key === 'Enter') searchPlace(); });
+$('#psList').addEventListener('click', e => { const it = e.target.closest('.ps'); if (it) pickPlace(+it.dataset.i); });
+$('#psPhotos').addEventListener('click', e => {
+  const ph = e.target.closest('[data-k]'); if (!ph) return;
+  const k = +ph.dataset.k, at = photoPick.indexOf(k);
+  if (at >= 0) photoPick.splice(at, 1); else if (photoPick.length < 3) photoPick.push(k); else return toast('사진은 3장까지');
+  document.querySelectorAll('#psPhotos [data-k]').forEach(el => el.classList.toggle('on', photoPick.includes(+el.dataset.k)));
+});
+$('#psClose').addEventListener('click', closePlace);
+$('#psSave').addEventListener('click', () => savePlace(false));
+$('#psNameOnly').addEventListener('click', () => savePlace(true));
+$('#calList').addEventListener('click', e => {
+  const im = e.target.closest('.pph [data-view]'); if (!im) return;
+  $('#viewer img').src = im.src; $('#viewer').classList.add('on');
+});
 function moveCal(delta){
   const [y, m] = calMonth.split('-').map(Number);
   const d = new Date(y, m - 1 + delta, 1);
@@ -895,6 +1062,7 @@ window.addEventListener('popstate', () => {
   if ($('#viewer').classList.contains('on')) $('#viewer').classList.remove('on');
   else if ($('#formSheet').classList.contains('on')) closeForm();
   else if ($('#detailSheet').classList.contains('on')) closeDetail();
+  else if ($('#placeSheet').classList.contains('on')) closePlace();
 });
 
 /* ---------- 통계 ---------- */
@@ -990,7 +1158,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.2.0';
+const APP_VERSION = 'v1.3.0';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 나의 방문기록 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
