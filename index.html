@@ -1285,6 +1285,9 @@ async function syncCloud(){
         return out;
       };
       const localV = Object.fromEntries(visits.map(v => [v.id, v]));
+      // 동기화 도중 사용자가 고친·지운 기록은 덮어쓰지 않으려고 시작 시점의 수정 시각을 적어 둠(아래에서 비교)
+      const snapV = Object.fromEntries(visits.map(v => [v.id, stamp(v)]));
+      const snapP = Object.fromEntries(Object.entries(plans).map(([k, p]) => [k, stamp(p)]));
       const allGone = Object.assign({}, remote.gone || {});
       for (const [k, t] of Object.entries(gone)) allGone[k] = Math.max(allGone[k] || 0, t);
       // 합치기
@@ -1318,18 +1321,34 @@ async function syncCloud(){
         }
         return out;
       };
-      let changedLocal = 0;
+      let changedLocal = 0, touched = false;
+      // 지금 기기 상태 — 시작 뒤에 바뀐 기록(사용자가 그 사이 저장·삭제)은 건드리지 않고, 끝나면 한 번 더 동기화
+      const freshV = async () => Object.fromEntries((await DB.all()).map(v => [v.id, v]));
+      const busyV = (cur, id) => { const ch = stamp(cur[id]) !== (id in snapV ? snapV[id] : -1); if (ch) touched = true; return ch; };
+      const busyP = id => { const ch = stamp(plans[id]) !== (id in snapP ? snapP[id] : -1); if (ch) touched = true; return ch; };
       for (const [id, v] of Object.entries(mergedV)) {
         if (localV[id] === v) continue;
-        await DB.put(Object.assign({}, v, {photos: await fromRefs(v.photos)})); changedLocal++;
+        const photos = await fromRefs(v.photos);
+        if (busyV(await freshV(), id)) continue;
+        await DB.put(Object.assign({}, v, {photos})); changedLocal++;
       }
-      for (const id of Object.keys(localV)) if (!mergedV[id]) { await DB.del(id); changedLocal++; }
+      for (const id of Object.keys(localV)) if (!mergedV[id]) {
+        if (busyV(await freshV(), id)) continue;
+        await DB.del(id); changedLocal++;
+      }
       for (const [id, p] of Object.entries(mergedP)) {
-        if (plans[id] === p) continue;
-        plans[id] = Object.assign({}, p, {photos: await fromRefs(p.photos)}); changedLocal++;
+        if (plans[id] === p && !busyP(id)) continue;
+        const photos = await fromRefs(p.photos);
+        if (busyP(id)) continue;
+        plans[id] = Object.assign({}, p, {photos}); changedLocal++;
       }
-      for (const id of Object.keys(plans)) if (!mergedP[id]) { delete plans[id]; plansGone.add(id); changedLocal++; }
+      for (const id of Object.keys(plans)) if (!mergedP[id]) {
+        if (busyP(id)) continue;
+        delete plans[id]; plansGone.add(id); changedLocal++;
+      }
+      for (const [k, t] of Object.entries(gone)) allGone[k] = Math.max(allGone[k] || 0, t);    // 그 사이 지운 것도 살림
       gone = allGone; lsSet('gone', gone);
+      if (touched) syncAgain = true;
       const allCats = [...new Set(cats.concat(remote.cats || []))];
       if (allCats.length !== cats.length) { cats = allCats; lsSet('cats', cats); $('#catEdit').value = cats.join(', '); }
       savePlans();
@@ -1386,7 +1405,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.5.1';
+const APP_VERSION = 'v1.5.2';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 나의 방문기록 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
