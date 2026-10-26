@@ -241,6 +241,17 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
       </div>
       <input type="file" id="importFile" accept=".json,application/json" hidden>
     </div>
+    <div class="panel" id="syncPanel">
+      <h3>PC·폰 동기화 (GitHub)</h3>
+      <p class="hint">비공개 저장소 <b>8602274/visit-log-data</b>에 방문·사진·약속을 맞춰 둡니다. 기기마다 처음 한 번 <b>접근 토큰</b>을 넣으면, 앱을 열 때·저장할 때 저절로 맞춰집니다. 토큰은 이 기기 안에만 저장됩니다.</p>
+      <input id="syncToken" type="password" placeholder="github_pat_… 토큰 붙여넣기" autocomplete="off">
+      <div class="row" style="margin-top:8px">
+        <button class="btn primary" id="btnSyncSave">토큰 저장·동기화</button>
+        <button class="btn" id="btnSyncNow">지금 동기화</button>
+      </div>
+      <p class="hint" id="syncInfo" style="margin-top:6px">연결 안 됨</p>
+      <button class="btn danger block" id="btnSyncOff" style="margin-top:6px;display:none">이 기기 연결 끊기(토큰 지우기)</button>
+    </div>
     <div class="panel" id="planPanel">
       <h3>PC 카톡 약속 가져오기</h3>
       <p class="hint">PC에서 <b>카톡 약속 감시</b> 도구가 켜져 있으면, 열어 둔 카톡 대화방의 약속(예: "토요일 3시")을 달력에 📌로 넣습니다. 폰에서는 쓰지 않습니다. 처음 한 번 크롬이 "로컬 네트워크 접근"을 물으면 허용하세요.</p>
@@ -649,8 +660,9 @@ async function syncPlans(){
   let added = 0;
   for (const p of Object.values(data.plans || {})) {
     if (!p.id || plans[p.id] || plansGone.has(p.id)) continue;
-    plans[p.id] = p; added++;
+    plans[p.id] = Object.assign({}, p, {updated: Date.now()}); added++;
   }
+  if (added) syncSoon();
   lsSet('planLast', data.last_scan || '');
   if (added) { savePlans(); renderAll(); toast(`카톡 약속 ${added}건을 달력에 넣었습니다`); }
   const s = $('#planInfo'); if (s) s.textContent = `감시 도구 연결됨 · 마지막 확인 ${data.last_scan || '-'}`;
@@ -663,7 +675,7 @@ $('#calList').addEventListener('click', e => {
     openPlace(id);
   } else if (b.dataset.pa === 'del') {
     if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = '한 번 더'; setTimeout(() => { b.dataset.confirm = ''; b.textContent = '지우기'; }, 3000); return; }
-    delete plans[id]; plansGone.add(id); savePlans(); renderCal(); toast('약속을 지웠습니다');
+    delete plans[id]; plansGone.add(id); markGone(id); savePlans(); renderCal(); toast('약속을 지웠습니다'); syncSoon();
   } else if (b.dataset.pa === 'visit') {
     const pl = p.place || {};
     openForm(null, Object.assign({name: p.title.replace(/^약속 · /, ''), date: p.date, with: p.room,
@@ -781,7 +793,9 @@ async function savePlace(nameOnly){
       if (got.length < photoPick.length) toast(`사진 ${photoPick.length - got.length}장은 받지 못했습니다`);
     }
   }
+  p.updated = Date.now();
   try { savePlans(); } catch { toast('저장 공간이 부족합니다 — 사진을 줄여 주세요'); return; }
+  syncSoon();
   closePlace(); renderCal(); toast('약속 장소를 저장했습니다');
 }
 $('#psGo').addEventListener('click', searchPlace);
@@ -990,8 +1004,8 @@ $('#fSave').addEventListener('click', async () => {
     with:$('#fWith').value.trim(), memo:$('#fMemo').value, again:$('#fAgain').checked, updated:Date.now()});
   const fromPlan = editing.fromPlan; delete editing.fromPlan;
   try { await DB.put(editing); } catch (err) { toast('저장 실패: 저장 공간이 부족할 수 있습니다'); return; }
-  if (fromPlan) { delete plans[fromPlan]; plansGone.add(fromPlan); savePlans(); }     // 약속 → 방문 기록이 되면 약속은 뺌
-  const id = editing.id; closeForm(); await reload();
+  if (fromPlan) { delete plans[fromPlan]; plansGone.add(fromPlan); markGone(fromPlan); savePlans(); }     // 약속 → 방문 기록이 되면 약속은 뺌
+  const id = editing.id; closeForm(); await reload(); syncSoon();
   toast('저장했습니다');
   if (detailId === id) openDetail(id);
 });
@@ -1000,7 +1014,8 @@ $('#fDelete').addEventListener('click', async () => {
   const b = $('#fDelete');
   if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = '한 번 더 누르면 삭제됩니다'; setTimeout(() => { b.dataset.confirm = ''; b.textContent = '이 기록 삭제'; }, 3000); return; }
   b.dataset.confirm = ''; b.textContent = '이 기록 삭제';
-  await DB.del(editing.id); closeForm(); closeDetail(); await reload(); toast('삭제했습니다');
+  markGone(editing.id);
+  await DB.del(editing.id); closeForm(); closeDetail(); await reload(); toast('삭제했습니다'); syncSoon();
 });
 
 /* ---------- 상세 ---------- */
@@ -1137,17 +1152,159 @@ $('#importFile').addEventListener('change', async e => {
     for (const id of data.plansGone || []) { plansGone.add(id); delete plans[id]; }
     for (const p of Object.values(data.plans || {})) if (p?.id && !plansGone.has(p.id)) plans[p.id] = Object.assign({}, plans[p.id], p);
     savePlans();
-    await reload();
+    await reload(); syncSoon();
     toast(`불러오기 완료: 추가 ${added}건, 갱신 ${updated}건`);
   } catch { toast('백업 파일이 올바르지 않습니다'); }
 });
 
+/* ---------- PC·폰 동기화 (비공개 GitHub 저장소) ---------- */
+// data.json = {visits:{id:기록}, plans:{id:약속}, gone:{id:지운 시각}, cats:[]} — 사진은 'gh:<sha1>.<확장자>' 로 바꿔 넣고
+// 그림 자체는 photos/<sha1>.<확장자> 로 따로(한 번 올린 사진은 다시 안 올림). 같은 id 는 updated(없으면 created)가 늦은 쪽,
+// 지움 표시(gone)가 그보다 늦으면 지움. 토큰은 기기마다 localStorage 'syncToken' 에만.
+const SYNC_REPO = '8602274/visit-log-data';
+const GH = `https://api.github.com/repos/${SYNC_REPO}/contents/`;
+let gone = lsGet('gone', {});
+const markGone = id => { gone[id] = Date.now(); lsSet('gone', gone); };
+let syncBusy = false, syncAgain = false, syncTimer = null;
+const syncToken = () => lsGet('syncToken', '');
+function syncSoon(){ if (!syncToken()) return; clearTimeout(syncTimer); syncTimer = setTimeout(syncCloud, 2500); }
+function syncSay(t, err){ const s = $('#syncInfo'); if (s) { s.textContent = t; s.style.color = err ? 'var(--danger)' : ''; } }
+async function gh(path, opt = {}){
+  const r = await fetch(GH + path, Object.assign({}, opt, {cache: 'no-store', headers: Object.assign({
+    'Authorization': 'Bearer ' + syncToken(), 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'}, opt.headers || {})}));
+  if (r.status === 404) return null;
+  if (!r.ok) { const e = new Error(`GitHub ${r.status}`); e.status = r.status; throw e; }
+  return r.json();
+}
+const b64utf8 = s => { const b = new TextEncoder().encode(s); let x = ''; for (let i = 0; i < b.length; i += 0x8000) x += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(x); };
+const utf8b64 = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g, '')), c => c.charCodeAt(0)));
+async function sha1(s){ const h = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(s)); return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join(''); }
+const extOf = d => ({'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif'})[(/^data:([^;]+)/.exec(d) || [])[1]] || 'jpg';
+const mimeOf = n => ({png: 'image/png', webp: 'image/webp', gif: 'image/gif'})[n.split('.').pop()] || 'image/jpeg';
+const stamp = r => r ? (r.updated || r.created || 0) : -1;
+
+async function syncCloud(){
+  if (!syncToken()) return;
+  if (syncBusy) { syncAgain = true; return; }
+  syncBusy = true; syncSay('동기화 중…');
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const f = await gh('data.json');
+      const remote = f ? JSON.parse(utf8b64(f.content)) : {visits: {}, plans: {}, gone: {}, cats: []};
+      const listing = await gh('photos') || [];
+      const have = new Set(listing.map(x => x.name));
+      // 사진: 내 쪽 data URL → 이름(sha1) — 저장소에 없으면 올림
+      const nameOf = new Map();
+      const toRefs = async arr => {
+        const out = [];
+        for (const p of arr || []) {
+          if (!p.startsWith('data:')) { out.push(p); continue; }
+          let n = nameOf.get(p);
+          if (!n) { n = `${await sha1(p)}.${extOf(p)}`; nameOf.set(p, n); }
+          if (!have.has(n)) {
+            try { await gh('photos/' + n, {method: 'PUT', body: JSON.stringify({message: 'photo ' + n, content: p.split(',')[1]})}); }
+            catch (e) { if (e.status !== 422) throw e; }      // 422 = 이미 있음(다른 기기가 막 올림)
+            have.add(n);
+          }
+          out.push('gh:' + n);
+        }
+        return out;
+      };
+      const localV = Object.fromEntries(visits.map(v => [v.id, v]));
+      const allGone = Object.assign({}, remote.gone || {});
+      for (const [k, t] of Object.entries(gone)) allGone[k] = Math.max(allGone[k] || 0, t);
+      // 합치기
+      const mergedV = {}, mergedP = {};
+      const ids = new Set([...Object.keys(localV), ...Object.keys(remote.visits || {})]);
+      for (const id of ids) {
+        const a = localV[id], b = (remote.visits || {})[id];
+        const win = stamp(a) >= stamp(b) ? a : b;
+        if (allGone[id] && allGone[id] >= stamp(win)) continue;
+        mergedV[id] = win;
+      }
+      const pids = new Set([...Object.keys(plans), ...Object.keys(remote.plans || {})]);
+      for (const id of pids) {
+        const a = plans[id], b = (remote.plans || {})[id];
+        const win = stamp(a) >= stamp(b) ? a : b;
+        if (allGone[id] && allGone[id] >= stamp(win)) continue;
+        mergedP[id] = win;
+      }
+      // 내 기기에 반영(저장소 쪽이 이긴 기록·사진 받아오기)
+      const cache = new Map();
+      const fromRefs = async arr => {
+        const out = [];
+        for (const p of arr || []) {
+          if (!p.startsWith('gh:')) { out.push(p); continue; }
+          const n = p.slice(3);
+          if (!cache.has(n)) {
+            const j = await gh('photos/' + n);
+            cache.set(n, j ? `data:${mimeOf(n)};base64,${j.content.replace(/\s/g, '')}` : null);
+          }
+          if (cache.get(n)) out.push(cache.get(n));
+        }
+        return out;
+      };
+      let changedLocal = 0;
+      for (const [id, v] of Object.entries(mergedV)) {
+        if (localV[id] === v) continue;
+        await DB.put(Object.assign({}, v, {photos: await fromRefs(v.photos)})); changedLocal++;
+      }
+      for (const id of Object.keys(localV)) if (!mergedV[id]) { await DB.del(id); changedLocal++; }
+      for (const [id, p] of Object.entries(mergedP)) {
+        if (plans[id] === p) continue;
+        plans[id] = Object.assign({}, p, {photos: await fromRefs(p.photos)}); changedLocal++;
+      }
+      for (const id of Object.keys(plans)) if (!mergedP[id]) { delete plans[id]; plansGone.add(id); changedLocal++; }
+      gone = allGone; lsSet('gone', gone);
+      const allCats = [...new Set(cats.concat(remote.cats || []))];
+      if (allCats.length !== cats.length) { cats = allCats; lsSet('cats', cats); $('#catEdit').value = cats.join(', '); }
+      savePlans();
+      // 저장소에 쓰기(사진은 이름으로)
+      const out = {app: 'visit-log', version: 1, saved: new Date().toISOString(), visits: {}, plans: {}, gone: allGone, cats};
+      for (const [id, v] of Object.entries(mergedV)) out.visits[id] = Object.assign({}, v, {photos: await toRefs(localV[id] === v ? v.photos : v.photos)});
+      for (const [id, p] of Object.entries(mergedP)) out.plans[id] = Object.assign({}, p, {photos: await toRefs(p.photos)});
+      const body = JSON.stringify(out);
+      const prev = f ? utf8b64(f.content) : '';
+      if (JSON.stringify(Object.assign({}, JSON.parse(prev || '{}'), {saved: out.saved})) !== body) {
+        try {
+          await gh('data.json', {method: 'PUT', body: JSON.stringify(Object.assign({message: 'sync ' + (isPhone ? '폰' : 'PC'), content: b64utf8(body)}, f ? {sha: f.sha} : {}))});
+        } catch (e) { if (e.status === 409 || e.status === 422) continue; throw e; }      // 그 사이 다른 기기가 씀 → 다시
+      }
+      if (changedLocal) await reload(); else renderAll();
+      lsSet('syncLast', new Date().toLocaleString('ko-KR'));
+      syncSay(`동기화됨 · ${lsGet('syncLast', '')} · 방문 ${Object.keys(mergedV).length} · 약속 ${Object.keys(mergedP).length}`);
+      if (changedLocal) toast(`다른 기기 기록 ${changedLocal}건을 맞췄습니다`);
+      return;
+    }
+    syncSay('동기화 실패 — 잠시 뒤 다시', true);
+  } catch (e) {
+    syncSay(e.status === 401 || e.status === 403 ? '토큰이 맞지 않거나 권한이 없습니다(Contents 읽기·쓰기)' : `동기화 실패: ${e.message || e}`, true);
+  } finally {
+    syncBusy = false;
+    if (syncAgain) { syncAgain = false; syncSoon(); }
+  }
+}
+function syncUi(){
+  const on = !!syncToken();
+  $('#btnSyncOff').style.display = on ? '' : 'none';
+  $('#syncToken').placeholder = on ? '저장된 토큰 있음(바꾸려면 새로 붙여넣기)' : 'github_pat_… 토큰 붙여넣기';
+  if (!on) syncSay('연결 안 됨 — 토큰을 넣으면 시작합니다');
+}
+$('#btnSyncSave').addEventListener('click', () => {
+  const t = $('#syncToken').value.trim();
+  if (t) { lsSet('syncToken', t); $('#syncToken').value = ''; }
+  if (!syncToken()) return toast('토큰을 붙여 넣어 주세요');
+  syncUi(); syncCloud();
+});
+$('#btnSyncNow').addEventListener('click', syncCloud);
+$('#btnSyncOff').addEventListener('click', () => { try { localStorage.removeItem('syncToken'); } catch {} syncUi(); toast('이 기기의 동기화 연결을 끊었습니다'); });
+
 /* ---------- 시작 ---------- */
 renderAll();
-DB.open().then(reload).then(syncPlans);
+DB.open().then(reload).then(syncPlans).then(() => { syncUi(); if (syncToken()) { syncSay('동기화 준비…'); syncCloud(); } });
 // 카톡 약속: 10분마다·앱으로 돌아올 때 다시 확인(감시 도구 자체는 1시간마다 카톡을 읽음)
 setInterval(syncPlans, 10 * 60 * 1000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) syncPlans(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { syncPlans(); syncSoon(); } });
 $('#planSync').checked = lsGet('planSync', true);
 $('#planSync').addEventListener('change', () => { lsSet('planSync', $('#planSync').checked); if ($('#planSync').checked) syncPlans(); });
 $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textContent = '확인 중…'; await syncPlans();
@@ -1155,7 +1312,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.3.1';
+const APP_VERSION = 'v1.4.0';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 나의 방문기록 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;

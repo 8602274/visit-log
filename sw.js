@@ -1,5 +1,5 @@
 // 오프라인 캐시. 앱 파일을 고치면 VERSION을 올릴 것.
-const VERSION = 'v1.3.1';
+const VERSION = 'v1.4.0';
 const APP = 'visit-app-' + VERSION;
 const TILES = 'visit-tiles';
 const TILE_MAX = 600;
@@ -33,7 +33,7 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   // PC 카톡 약속 감시 도구(127.0.0.1)·카카오 지도/장소 검색은 서비스 워커를 거치지 않음
-  if (url.hostname === '127.0.0.1' || url.hostname === 'localhost' || /(^|\.)(kakao\.com|daumcdn\.net|kakaocdn\.net)$/.test(url.hostname)) return;
+  if (url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === 'api.github.com' || /(^|\.)(kakao\.com|daumcdn\.net|kakaocdn\.net)$/.test(url.hostname)) return;
 
   // 앱 화면: 인터넷 되면 최신본, 안 되면 저장본
   if (req.mode === 'navigate') {
