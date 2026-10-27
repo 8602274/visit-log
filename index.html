@@ -278,6 +278,16 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
       <button class="btn block" id="btnPlanNow" style="margin-top:6px">지금 가져오기</button>
     </div>
     <div class="panel">
+      <h3>명단 사진 AI 인식 (선택)</h3>
+      <p class="hint">받은 명단을 <b>사진</b>에서 가져올 때 쓰는 Claude API 키입니다. 키가 없으면 기기 안에서 글자를 읽는데, 인쇄된 글자는 되지만 <b>손글씨(방명록·봉투)는 잘 못 읽습니다</b>. 키를 넣으면 사진이 Anthropic으로 보내져 손글씨도 읽고, 사진 한 장에 몇십 원 정도 요금이 키 주인에게 청구됩니다. 키는 이 기기 안에만 저장되고 동기화되지 않습니다.</p>
+      <input id="aiKey" type="password" placeholder="sk-ant-… 키 붙여넣기" autocomplete="off">
+      <div class="row" style="margin-top:8px">
+        <button class="btn primary" id="btnAiSave">키 저장</button>
+        <button class="btn danger" id="btnAiOff">키 지우기</button>
+      </div>
+      <p class="hint" id="aiInfo" style="margin-top:6px">키 없음 — 기기 안 글자 인식 사용</p>
+    </div>
+    <div class="panel">
       <h3>숨긴 기록</h3>
       <p class="hint" id="hiddenInfo">숨긴 기록이 없습니다.</p>
       <button class="btn block" id="btnShowHidden" style="margin-top:6px">🙈 숨긴 기록 보기</button>
@@ -402,6 +412,13 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
       <textarea id="fRecv" style="min-height:140px" placeholder="김철수 10만 회사 동료&#10;이영희 50000 친구&#10;박민수 외삼촌 20만 친척"></textarea>
       <div class="hint">금액은 10만·100000·10만원 모두 됩니다. 금액 앞은 이름, 뒤는 관계로 읽습니다.</div>
       <div class="hint" id="fRecvInfo" style="margin-top:4px"></div>
+      <div class="row" style="margin-top:6px">
+        <button class="btn" id="fRecvPhoto" type="button">📷 사진에서 가져오기</button>
+        <button class="btn" id="fRecvXls" type="button">📊 엑셀에서 가져오기</button>
+      </div>
+      <input type="file" id="fRecvPhotoFile" accept="image/*" multiple hidden>
+      <input type="file" id="fRecvXlsFile" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" hidden>
+      <div class="hint" id="fRecvImp" style="margin-top:4px">가져온 명단은 위 칸 아래에 붙습니다. 저장 전에 꼭 확인·고쳐 주세요.</div>
       <button class="btn" id="fRecvOff" type="button" style="margin-top:6px">받은 명단 빼기</button>
     </div>
 
@@ -1312,6 +1329,126 @@ function recvInfo(){
 $('#fRecvBtn').addEventListener('click', () => { showRecv(''); $('#fRecv').focus(); });
 $('#fRecvOff').addEventListener('click', e => { if (!$('#fRecv').value.trim() || twice(e.currentTarget, '한 번 더 누르면 명단을 뺍니다')) showRecv(null); });
 $('#fRecv').addEventListener('input', recvInfo);
+
+/* ---------- 받은 명단 가져오기 (엑셀·사진) ---------- */
+// 외부 라이브러리는 쓸 때만 불러옴
+const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+const TESS_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+const SDK_URL = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.134.0/+esm';
+const loadScript = (() => { const p = {}; return url => p[url] = p[url] || new Promise((res, rej) => {
+  const s = document.createElement('script'); s.src = url; s.onload = res; s.onerror = () => { delete p[url]; rej(new Error('인터넷 연결을 확인해 주세요')); };
+  document.head.appendChild(s);
+}); })();
+function impSay(t){ $('#fRecvImp').textContent = t; }
+// 가져온 명단을 칸 끝에 붙임
+function appendRecv(list, how){
+  if (!list.length) { impSay(`${how}: 읽은 사람이 없습니다`); return; }
+  const cur = $('#fRecv').value.replace(/\s+$/, '');
+  $('#fRecv').value = (cur ? cur + '\n' : '') + recvText(list);
+  recvInfo();
+  const noAmt = list.filter(r => !r.amount).length;
+  impSay(`${how}: ${list.length}명 가져옴${noAmt ? ` (금액 없는 ${noAmt}명)` : ''} — 저장 전에 확인해 주세요`);
+  toast(`${list.length}명을 가져왔습니다`);
+}
+const SKIP_ROW = /^(합계|총계|소계|계|total)$/i;
+const cellAmt = c => typeof c === 'number' ? Math.round(c) : AMT.test(String(c).trim().replace(/\s/g, '')) ? parseAmt(String(c).trim().replace(/\s/g, '')) : 0;
+// 표(2차원 배열) → 명단. 머리줄(이름·금액·관계)이 있으면 그 칸을, 없으면 줄마다 글자 칸=이름, 숫자 칸=금액, 다음 글자 칸=관계
+function rowsToRecv(rows){
+  rows = rows.map(r => r.map(c => typeof c === 'string' ? c.trim() : c));
+  let hi = -1, col = {};
+  for (let i = 0; i < Math.min(rows.length, 10) && hi < 0; i++) {
+    const r = rows[i].map(c => String(c));
+    const f = re => r.findIndex(c => re.test(c));
+    const n = f(/이름|성명|성함|보내신\s*분|name/i), a = f(/금액|축의|부의|조의|액수|amount/i);
+    if (n >= 0 && a >= 0) { hi = i; col = {n, a, r: f(/관계|소속|비고|구분|회사|메모/)}; }
+  }
+  const out = [];
+  for (const r of hi >= 0 ? rows.slice(hi + 1) : rows) {
+    let who, amount, rel;
+    if (hi >= 0) { who = String(r[col.n] ?? '').trim(); amount = cellAmt(r[col.a] ?? ''); rel = col.r >= 0 ? String(r[col.r] ?? '').trim() : ''; }
+    else {
+      const ai = r.findIndex(c => c !== '' && cellAmt(c));
+      const texts = r.map((c, i) => [i, c]).filter(([i, c]) => i !== ai && typeof c === 'string' && c && !cellAmt(c) && !/^\d+$/.test(c));
+      who = texts[0]?.[1] || ''; amount = ai >= 0 ? cellAmt(r[ai]) : 0; rel = texts[1]?.[1] || '';
+    }
+    if (!who || SKIP_ROW.test(who.replace(/\s/g, ''))) continue;
+    const o = {who}; if (amount) o.amount = amount; if (rel) o.rel = rel;
+    out.push(o);
+  }
+  return out;
+}
+$('#fRecvXls').addEventListener('click', () => $('#fRecvXlsFile').click());
+$('#fRecvXlsFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    impSay('엑셀 읽는 중…'); await loadScript(XLSX_URL);
+    const wb = XLSX.read(await f.arrayBuffer(), {type: 'array'});
+    const list = wb.SheetNames.flatMap(n => rowsToRecv(XLSX.utils.sheet_to_json(wb.Sheets[n], {header: 1, raw: true, defval: ''})));
+    appendRecv(list, '엑셀');
+  } catch (err) { impSay('엑셀을 읽지 못했습니다: ' + (err.message || err)); }
+});
+
+// 사진: Claude API 키가 있으면 Claude로(손글씨 가능), 없으면 기기 안 글자 인식(Tesseract)
+const aiKey = () => lsGet('aiKey', '');
+function imgToB64(file, max = 1600){
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      res(c.toDataURL('image/jpeg', 0.9).split(',')[1]);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('사진을 열 수 없습니다')); };
+    img.src = url;
+  });
+}
+const RECV_SCHEMA = {type: 'object', additionalProperties: false, required: ['people'], properties: {people: {type: 'array', items: {
+  type: 'object', additionalProperties: false, required: ['who', 'amount', 'rel'],
+  properties: {who: {type: 'string'}, amount: {type: 'integer'}, rel: {type: 'string'}}}}}};
+let getAnthropic = async () => { const m = await import(SDK_URL); return new m.default({apiKey: aiKey(), dangerouslyAllowBrowser: true}); };
+async function claudeRead(file){
+  const client = await getAnthropic();
+  const res = await client.beta.messages.create({
+    model: 'claude-opus-5-5', max_tokens: 16000,
+    output_config: {effort: 'medium', format: {type: 'json_schema', schema: RECV_SCHEMA}},
+    betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
+    messages: [{role: 'user', content: [
+      {type: 'image', source: {type: 'base64', media_type: 'image/jpeg', data: await imgToB64(file)}},
+      {type: 'text', text: '한국의 경조사(결혼식·장례식 등) 축의금·부의금 명단, 방명록, 봉투 사진입니다. 사진에 적힌 사람마다 이름(who), 금액(amount, 원 단위 정수 — "10만"은 100000, 금액이 없으면 0), 관계·소속(rel, 없으면 빈 문자열)을 적힌 순서대로 뽑아 주세요. 합계·소계 줄은 빼고, 읽기 어려운 글자는 가장 그럴듯하게 읽되 지어내지는 마세요.'}
+    ]}]
+  });
+  if (res.stop_reason === 'refusal') throw new Error('AI가 이 사진을 처리하지 않았습니다');
+  const txt = res.content.filter(b => b.type === 'text').map(b => b.text).join('');
+  return JSON.parse(txt).people.map(p => { const o = {who: p.who.trim()}; if (p.amount > 0) o.amount = p.amount; if (p.rel?.trim()) o.rel = p.rel.trim(); return o; }).filter(p => p.who);
+}
+async function tessRead(file, i, n){
+  await loadScript(TESS_URL);
+  const w = await Tesseract.createWorker('kor+eng', 1, {logger: m => { if (m.status === 'recognizing text') impSay(`사진 ${i}/${n} 글자 읽는 중… ${Math.round(m.progress * 100)}%`); }});
+  try {
+    const {data: {text}} = await w.recognize(file);
+    // 금액이 보이는 줄만 명단으로(제목·날짜 같은 줄은 버림)
+    const lines = text.split('\n').map(l => l.replace(/[|:;_=~*·•]/g, ' ').replace(/\s+/g, ' ').trim()).filter(l => l.split(' ').some(t => AMT.test(t) && parseAmt(t) >= 1000));
+    return parseRecv(lines.join('\n')).filter(r => !SKIP_ROW.test(r.who.replace(/\s/g, '')));
+  } finally { await w.terminate(); }
+}
+$('#fRecvPhoto').addEventListener('click', () => $('#fRecvPhotoFile').click());
+$('#fRecvPhotoFile').addEventListener('change', async e => {
+  const files = [...e.target.files]; e.target.value = ''; if (!files.length) return;
+  const ai = !!aiKey(), all = [];
+  try {
+    for (let i = 0; i < files.length; i++) {
+      impSay(ai ? `사진 ${i + 1}/${files.length} AI로 읽는 중… (몇십 초 걸릴 수 있어요)` : `사진 ${i + 1}/${files.length} 글자 인식 준비 중… (처음엔 1~2분)`);
+      all.push(...(ai ? await claudeRead(files[i]) : await tessRead(files[i], i + 1, files.length)));
+    }
+    appendRecv(all, ai ? '사진(AI)' : '사진');
+    if (!ai && all.length) $('#fRecvImp').textContent += ' · 손글씨는 설정의 "명단 사진 AI 인식"을 쓰면 더 잘 읽습니다';
+  } catch (err) {
+    if (all.length) appendRecv(all, '사진(일부)');
+    const m = err?.status === 401 ? 'API 키가 맞지 않습니다 (설정에서 확인)' : err?.status === 429 ? '요청이 많습니다. 잠시 뒤 다시 해 주세요' : (err?.message || String(err));
+    impSay('사진을 읽지 못했습니다: ' + m);
+  }
+});
 $('#fGiftBtn').addEventListener('click', () => { showGift({}); $('#fGiftWho').focus(); });
 $('#fGiftOff').addEventListener('click', () => showGift(null));
 $('#fGiftAmt').addEventListener('input', giftInfo);
@@ -1559,6 +1696,18 @@ function applyTheme(t){ if (t) document.documentElement.dataset.theme = t; else 
 $('#theme').value = lsGet('theme', ''); applyTheme($('#theme').value);
 $('#theme').addEventListener('change', () => { lsSet('theme', $('#theme').value); applyTheme($('#theme').value); });
 $('#sort').value = 'date';   // 열 때는 항상 최신순(맨 위가 최근)
+function aiUi(){
+  const k = aiKey();
+  $('#aiInfo').textContent = k ? `키 저장됨 (…${k.slice(-4)}) — 사진은 Claude로 읽음` : '키 없음 — 기기 안 글자 인식 사용';
+  $('#btnAiOff').style.display = k ? '' : 'none';
+}
+$('#btnAiSave').addEventListener('click', () => {
+  const k = $('#aiKey').value.trim();
+  if (!/^sk-ant-/.test(k)) return toast('sk-ant- 로 시작하는 키를 붙여넣어 주세요');
+  lsSet('aiKey', k); $('#aiKey').value = ''; aiUi(); toast('키를 저장했습니다');
+});
+$('#btnAiOff').addEventListener('click', e => { if (!twice(e.currentTarget, '한 번 더 누르면 지웁니다')) return; lsSet('aiKey', ''); aiUi(); toast('키를 지웠습니다'); });
+aiUi();
 $('#btnShowHidden').addEventListener('click', () => {
   filterCat = '__hidden'; selIds.clear(); $('#q').value = '';
   showTab('list'); renderChips(); renderList();
@@ -1770,7 +1919,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.11.0';
+const APP_VERSION = 'v1.12.0';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
