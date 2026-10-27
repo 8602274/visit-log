@@ -6,12 +6,12 @@
 <meta name="theme-color" content="#0f766e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="방문기록">
+<meta name="apple-mobile-web-app-title" content="그날그곳">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<title>나의 방문기록</title>
+<title>그날그곳</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
@@ -204,7 +204,7 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
 <body>
 
 <header>
-  <h1>📍 나의 방문기록</h1>
+  <h1>📍 그날그곳</h1>
   <span class="count" id="countTxt"></span>
 </header>
 
@@ -308,7 +308,7 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
     </div>
     <div class="panel">
       <h3>앱 정보</h3>
-      <p class="hint" id="appInfo">나의 방문기록 v1.0.0</p>
+      <p class="hint" id="appInfo">그날그곳 v1.0.0</p>
     </div>
   </section>
 </main>
@@ -1388,7 +1388,7 @@ $('#btnExport').addEventListener('click', () => {
   const data = JSON.stringify({app:'visit-log', version:1, exported:new Date().toISOString(), cats, visits: allVisits, plans, plansGone:[...plansGone]});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([data], {type:'application/json'}));
-  a.download = `방문기록_백업_${today()}.json`;
+  a.download = `그날그곳_백업_${today()}.json`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   toast(`${allVisits.length}건 백업 파일을 만들었습니다`);
@@ -1590,19 +1590,19 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.8.1';
+const APP_VERSION = 'v1.9.0';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
-  const text = '📍 나의 방문기록 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
+  const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
   try {
     if (navigator.share) {
       // 안내 이미지까지 함께 보낼 수 있으면 첨부
       try {
         const blob = await (await fetch('guide.png')).blob();
-        const file = new File([blob], '방문기록앱_안내.png', {type:'image/png'});
+        const file = new File([blob], '그날그곳_안내.png', {type:'image/png'});
         if (navigator.canShare?.({files:[file]})) { await navigator.share({files:[file], text}); return; }
       } catch (err) { if (err?.name === 'AbortError') return; }
-      await navigator.share({title:'나의 방문기록', text, url:APP_URL});
+      await navigator.share({title:'그날그곳', text, url:APP_URL});
       return;
     }
     await navigator.clipboard.writeText(text);
@@ -1636,7 +1636,7 @@ const standalone = matchMedia('(display-mode: standalone)').matches || navigator
   try { persisted = await navigator.storage?.persisted?.() || (standalone && await navigator.storage?.persist?.()); } catch {}
   let used = '';
   try { const est = await navigator.storage?.estimate?.(); if (est?.usage) used = ` · 사용 용량 ${(est.usage/1048576).toFixed(1)}MB`; } catch {}
-  $('#appInfo').innerHTML = `나의 방문기록 ${APP_VERSION}${standalone ? ' · 앱으로 실행 중' : ''}<br>기록 보호: ${persisted ? '켜짐 (자동 삭제 안 됨)' : '꺼짐 — 앱으로 설치하면 켜집니다'}${used}`;
+  $('#appInfo').innerHTML = `그날그곳 ${APP_VERSION}${standalone ? ' · 앱으로 실행 중' : ''}<br>기록 보호: ${persisted ? '켜짐 (자동 삭제 안 됨)' : '꺼짐 — 앱으로 설치하면 켜집니다'}${used}`;
   if (standalone) $('#installHint').textContent = '이미 앱으로 설치되어 실행 중입니다.';
 })();
 </script>
