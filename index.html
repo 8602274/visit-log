@@ -370,6 +370,32 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
       </div>
       <div class="hint" id="fEndInfo" style="margin-top:4px"></div>
     </div>
+    <button class="btn" id="fGiftBtn" type="button" style="margin-top:8px">💐 경조사 넣기 (누구·금액)</button>
+    <div id="fGiftRow" style="display:none">
+      <div class="row">
+        <div>
+          <label class="f">누구의 경조사</label>
+          <input id="fGiftWho" list="giftWhoList" placeholder="예: 김철수 (아들 결혼)" autocomplete="off">
+        </div>
+        <div>
+          <label class="f">관계</label>
+          <input id="fGiftRel" list="giftRelList" placeholder="예: 회사 동료" autocomplete="off">
+        </div>
+      </div>
+      <label class="f">낸 금액 (원)</label>
+      <div class="tools" style="margin:0">
+        <input id="fGiftAmt" type="number" inputmode="numeric" min="0" step="10000" placeholder="예: 100000">
+        <button class="btn" id="fGiftOff" type="button" style="flex:0 0 auto">경조사 빼기</button>
+      </div>
+      <div class="chips" id="fGiftQuick" style="margin-top:6px">
+        <button class="chip" type="button" data-amt="50000">5만</button><button class="chip" type="button" data-amt="100000">10만</button>
+        <button class="chip" type="button" data-amt="150000">15만</button><button class="chip" type="button" data-amt="200000">20만</button>
+        <button class="chip" type="button" data-amt="300000">30만</button><button class="chip" type="button" data-amt="500000">50만</button>
+      </div>
+      <div class="hint" id="fGiftInfo" style="margin-top:4px"></div>
+      <datalist id="giftWhoList"></datalist>
+      <datalist id="giftRelList"></datalist>
+    </div>
 
     <label class="f">별점</label>
     <div class="rate" id="fRate"></div>
@@ -445,7 +471,9 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
 
 <script>
 'use strict';
-const DEFAULT_CATS = ['🍜 맛집','☕ 카페','🏞️ 명소','✈️ 여행','⛪ 성지','🏨 숙소','🛍️ 쇼핑','💒 결혼식','📍 기타'];
+const DEFAULT_CATS = ['🍜 맛집','☕ 카페','🏞️ 명소','✈️ 여행','⛪ 성지','🏨 숙소','🛍️ 쇼핑','💒 결혼식','🕯️ 장례식','📍 기타'];
+// 이 이름이 들어간 분류는 입력 화면에서 경조사 칸을 저절로 엶
+const GIFT_CAT = /결혼|웨딩|장례|조문|빈소|돌잔치|잔치|칠순|팔순|회갑|환갑|병문안|경조/;
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0,10); };
@@ -463,6 +491,9 @@ const visitDays = v => {
 };
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 const starStr = n => n ? '★'.repeat(n) + '☆'.repeat(5-n) : '';
+// 경조사: 기록의 gift = {who, rel, amount(원)}
+const won = n => !n ? '' : n % 10000 === 0 ? `${(n / 10000).toLocaleString()}만원` : `${n.toLocaleString()}원`;
+const giftStr = g => !g ? '' : [g.who, g.rel && `(${g.rel})`, won(g.amount)].filter(Boolean).join(' ');
 const catIcon = c => { const m = /^(\p{Extended_Pictographic}[️‍\p{Extended_Pictographic}]*)\s*/u.exec(c||''); return m ? m[1] : '📍'; };
 const catName = c => (c||'').replace(/^(\p{Extended_Pictographic}[️‍\p{Extended_Pictographic}]*)\s*/u, '');
 
@@ -508,6 +539,15 @@ if (!lsGet('catWedding', false)) {
   if (!cats.some(c => catName(c) === '결혼식')) { const i = cats.findIndex(c => catName(c) === '기타'); cats.splice(i < 0 ? cats.length : i, 0, '💒 결혼식'); lsSet('cats', cats); }
   lsSet('catWedding', true);
 }
+// v1.10.0 장례식 분류 추가 — 결혼식 다음(없으면 기타 앞)에 한 번만
+if (!lsGet('catFuneral', false)) {
+  if (!cats.some(c => catName(c) === '장례식')) {
+    let i = cats.findIndex(c => catName(c) === '결혼식');
+    i = i >= 0 ? i + 1 : cats.findIndex(c => catName(c) === '기타');
+    cats.splice(i < 0 ? cats.length : i, 0, '🕯️ 장례식'); lsSet('cats', cats);
+  }
+  lsSet('catFuneral', true);
+}
 let filterCat = '';
 let editing = null;      // 입력 중인 기록
 let detailId = null;
@@ -526,6 +566,8 @@ function renderAll(){
   if ($('#tab-stat').classList.contains('on')) renderStats();
   if ($('#tab-cal').classList.contains('on')) renderCal();
   $('#nameList').innerHTML = [...new Set(visits.map(v => v.name))].map(n => `<option value="${esc(n)}">`).join('');
+  const opts = k => [...new Set(visits.map(v => v.gift?.[k]).filter(Boolean))].map(n => `<option value="${esc(n)}">`).join('');
+  $('#giftWhoList').innerHTML = opts('who'); $('#giftRelList').innerHTML = opts('rel');
 }
 const visitNo = v => visits.filter(x => x.name === v.name && (x.date < v.date || (x.date === v.date && x.created <= v.created))).length;
 const sameCount = name => visits.filter(x => x.name === name).length;
@@ -534,7 +576,8 @@ const findVisit = id => allVisits.find(x => x.id === id);
 /* ---------- 목록 ---------- */
 function renderChips(){
   const html = [`<button class="chip ${filterCat===''?'on':''}" data-c="">전체</button>`,
-    `<button class="chip ${filterCat==='__again'?'on':''}" data-c="__again">💚 또 갈 곳</button>`]
+    `<button class="chip ${filterCat==='__again'?'on':''}" data-c="__again">💚 또 갈 곳</button>`,
+    `<button class="chip ${filterCat==='__gift'?'on':''}" data-c="__gift">💐 경조사</button>`]
     .concat(cats.map(c => `<button class="chip ${filterCat===c?'on':''}" data-c="${esc(c)}">${esc(c)}</button>`));
   const nh = allVisits.length - visits.length;
   if (nh || filterCat === '__hidden') html.push(`<button class="chip ${filterCat==='__hidden'?'on':''}" data-c="__hidden">🙈 숨긴 기록 ${nh}</button>`);
@@ -554,8 +597,9 @@ function filtered(){
   const base = filterCat === '__hidden' ? allVisits.filter(v => v.hidden) : visits;
   let arr = base.filter(v => {
     if (filterCat === '__again' && !v.again) return false;
-    if (filterCat && filterCat !== '__again' && filterCat !== '__hidden' && v.cat !== filterCat) return false;
-    if (q && ![v.name, v.addr, v.memo, v.with, v.cat].join(' ').toLowerCase().includes(q)) return false;
+    if (filterCat === '__gift' && !v.gift) return false;
+    if (filterCat && !filterCat.startsWith('__') && v.cat !== filterCat) return false;
+    if (q && ![v.name, v.addr, v.memo, v.with, v.cat, v.gift?.who, v.gift?.rel].join(' ').toLowerCase().includes(q)) return false;
     return true;
   });
   const s = $('#sort').value;
@@ -600,6 +644,7 @@ function itemHtml(v){
       <div class="info">
         <div class="name">${v.hidden ? '🙈 ' : ''}${esc(v.name)}${n > 1 && !v.hidden ? `<span class="badge">${visitNo(v)}/${n}회</span>` : ''}${v.again ? ' 💚' : ''}</div>
         <div class="meta">${esc(periodStr(v))} ·${esc(catName(v.cat))}${v.addr ? ' · ' + esc(v.addr) : ''}</div>
+        ${v.gift ? `<div class="meta">💐 ${esc(giftStr(v.gift))}</div>` : ''}
         ${v.rating ? `<div class="stars">${starStr(v.rating)}</div>` : ''}
       </div></div>`;
 }
@@ -1174,6 +1219,7 @@ function openForm(v, preset){
   $('#fName').value = editing.name; $('#fDate').value = editing.date; $('#fTime').value = editing.time || '';
   showEnd(editing.dateEnd > editing.date ? editing.dateEnd : '');
   fillCatSelect(editing.cat);
+  showGift(editing.gift || (!v && GIFT_CAT.test(catName(editing.cat)) ? {} : null));
   $('#fAddr').value = editing.addr; $('#fWith').value = editing.with; $('#fMemo').value = editing.memo;
   $('#fAgain').checked = !!editing.again;
   $('#fDelete').style.display = v ? '' : 'none';
@@ -1199,6 +1245,35 @@ $('#fEndBtn').addEventListener('click', () => {
   showEnd(d.toISOString().slice(0,10)); $('#fDateEnd').focus();
 });
 $('#fEndOff').addEventListener('click', () => showEnd(''));
+// 경조사: [💐 경조사 넣기]로 열거나, 결혼식·장례식 같은 분류를 고르면 저절로 열림. null = 닫기
+function showGift(g){
+  const on = !!g;
+  $('#fGiftWho').value = g?.who || ''; $('#fGiftRel').value = g?.rel || ''; $('#fGiftAmt').value = g?.amount || '';
+  $('#fGiftRow').style.display = on ? '' : 'none';
+  $('#fGiftBtn').style.display = on ? 'none' : '';
+  giftInfo();
+}
+function giftInfo(){
+  const n = +$('#fGiftAmt').value || 0, who = $('#fGiftWho').value.trim();
+  const prev = who ? visits.filter(x => x.gift?.who === who && x.id !== editing?.id) : [];
+  const sum = prev.reduce((s, x) => s + (x.gift.amount || 0), 0);
+  $('#fGiftInfo').textContent = [n ? `💰 ${won(n)}` : '', prev.length ? `이 분께 전에 ${prev.length}번${sum ? ` · 모두 ${won(sum)}` : ''}` : ''].filter(Boolean).join(' — ');
+}
+$('#fGiftBtn').addEventListener('click', () => { showGift({}); $('#fGiftWho').focus(); });
+$('#fGiftOff').addEventListener('click', () => showGift(null));
+$('#fGiftAmt').addEventListener('input', giftInfo);
+$('#fGiftWho').addEventListener('input', giftInfo);
+$('#fGiftWho').addEventListener('change', () => {   // 전에 적은 사람이면 관계를 채움
+  const prev = visits.find(x => x.gift?.who === $('#fGiftWho').value.trim() && x.gift.rel);
+  if (prev && !$('#fGiftRel').value) $('#fGiftRel').value = prev.gift.rel;
+});
+$('#fGiftQuick').addEventListener('click', e => {
+  const b = e.target.closest('[data-amt]'); if (!b) return;
+  $('#fGiftAmt').value = b.dataset.amt; giftInfo();
+});
+$('#fCat').addEventListener('change', () => {
+  if ($('#fGiftRow').style.display === 'none' && GIFT_CAT.test(catName($('#fCat').value))) showGift({});
+});
 $('#fDate').addEventListener('change', endInfo);
 $('#fDateEnd').addEventListener('change', endInfo);
 function showFormPlace(){
@@ -1218,6 +1293,7 @@ $('#fName').addEventListener('change', () => {
   if (!prev || allVisits.some(x => x.id === editing.id)) return;
   if (!$('#fAddr').value) $('#fAddr').value = prev.addr || '';
   fillCatSelect(prev.cat);
+  if ($('#fGiftRow').style.display === 'none' && GIFT_CAT.test(catName(prev.cat))) showGift({});
   if (editing.lat == null && prev.lat != null) { setPick(prev.lat, prev.lng); if (pickMap) pickMap.setView([prev.lat, prev.lng], 16); }
 });
 function closeForm(){ $('#formSheet').classList.remove('on'); editing = null; }
@@ -1234,6 +1310,11 @@ $('#fSave').addEventListener('click', async () => {
   if (end && end <= editing.date) { toast('끝나는 날이 시작일보다 뒤여야 합니다'); $('#fDateEnd').focus(); return; }
   if (end) editing.dateEnd = end; else delete editing.dateEnd;
   const tm = $('#fTime').value; if (tm) editing.time = tm; else delete editing.time;
+  const g = {who: $('#fGiftWho').value.trim(), rel: $('#fGiftRel').value.trim(), amount: Math.max(0, Math.round(+$('#fGiftAmt').value || 0))};
+  if ($('#fGiftRow').style.display !== 'none' && (g.who || g.amount)) {
+    if (!g.rel) delete g.rel; if (!g.amount) delete g.amount;
+    editing.gift = g;
+  } else delete editing.gift;
   const fromPlan = editing.fromPlan; delete editing.fromPlan;
   try { await DB.put(editing); } catch (err) { toast('저장 실패: 저장 공간이 부족할 수 있습니다'); return; }
   if (fromPlan) { delete plans[fromPlan]; plansGone.add(fromPlan); markGone(fromPlan); savePlans(); }     // 약속 → 방문 기록이 되면 약속은 뺌
@@ -1267,6 +1348,7 @@ function openDetail(id){
       ${v.addr ? `<br>📌 ${esc(v.addr)}` : ''}
       ${v.place?.phone ? `<br>📞 <a href="tel:${esc(v.place.phone)}" style="color:var(--accent)">${esc(v.place.phone)}</a>` : ''}
       ${v.with ? `<br>👥 ${esc(v.with)}` : ''}
+      ${v.gift ? `<br>💐 ${esc(giftStr(v.gift))}` : ''}
     </div>
     ${v.memo ? `<div class="memo">${esc(v.memo)}</div>` : ''}
     ${v.lat != null ? `<div id="dMap"></div>
@@ -1363,8 +1445,34 @@ function renderStats(){
     <div class="panel"><h3>최근 12개월</h3>${bars(months)}</div>
     <div class="panel"><h3>분류별</h3>${bars(Object.entries(byCat).sort((a,b)=>b[1]-a[1]))}</div>
     <div class="panel"><h3>자주 간 곳</h3>${bars(top)}</div>
-    ${best.length ? `<div class="panel"><h3>별점 높은 곳</h3>${best.map(([k,r]) => `<div class="bar"><span class="lab" style="width:auto;flex:1">${esc(k)}</span><span class="stars">${starStr(Math.round(r))}</span><span class="n" style="width:36px">${r.toFixed(1)}</span></div>`).join('')}</div>` : ''}`;
+    ${best.length ? `<div class="panel"><h3>별점 높은 곳</h3>${best.map(([k,r]) => `<div class="bar"><span class="lab" style="width:auto;flex:1">${esc(k)}</span><span class="stars">${starStr(Math.round(r))}</span><span class="n" style="width:36px">${r.toFixed(1)}</span></div>`).join('')}</div>` : ''}
+    ${giftBook()}`;
 }
+// 경조사 장부: 올해·전체 낸 금액, 사람별 횟수·합계·마지막 날짜. 사람을 누르면 목록에서 그 사람 기록만
+function giftBook(){
+  const gs = visits.filter(v => v.gift);
+  if (!gs.length) return `<div class="panel"><h3>💐 경조사 장부</h3><p class="hint">결혼식·장례식 같은 기록에 [💐 경조사 넣기]로 누구·금액을 적으면 여기에 모입니다.</p></div>`;
+  const y = today().slice(0,4), sum = a => a.reduce((s, v) => s + (v.gift.amount || 0), 0);
+  const yr = gs.filter(v => (v.date||'').startsWith(y));
+  const per = {};
+  for (const v of gs) {
+    const k = v.gift.who || '(이름 없음)', p = per[k] = per[k] || {n:0, amt:0, last:'', rel:''};
+    p.n++; p.amt += v.gift.amount || 0; if ((v.date||'') > p.last) p.last = v.date || ''; if (v.gift.rel) p.rel = v.gift.rel;
+  }
+  const rows = Object.entries(per).sort((a,b) => b[1].last.localeCompare(a[1].last));
+  return `<div class="panel"><h3>💐 경조사 장부</h3>
+    <div class="statGrid">
+      <div class="stat"><b>${yr.length}</b><span>${y}년 경조사</span></div>
+      <div class="stat"><b style="font-size:18px">${won(sum(yr)) || '0원'}</b><span>${y}년 낸 금액</span></div>
+      <div class="stat"><b style="font-size:18px">${won(sum(gs)) || '0원'}</b><span>전체 낸 금액</span></div>
+    </div>
+    <div class="history">${rows.map(([k, p]) => `<a data-gift="${esc(k)}">• ${esc(k)}${p.rel ? ` (${esc(p.rel)})` : ''} — ${p.n}번${p.amt ? ` · ${won(p.amt)}` : ''} · 마지막 ${esc(p.last)}</a>`).join('<br>')}</div></div>`;
+}
+$('#stats').addEventListener('click', e => {
+  const a = e.target.closest('[data-gift]'); if (!a) return;
+  filterCat = '__gift'; selIds.clear(); $('#q').value = a.dataset.gift === '(이름 없음)' ? '' : a.dataset.gift;
+  showTab('list'); renderChips(); renderList();
+});
 
 /* ---------- 설정 ---------- */
 $('#catEdit').value = cats.join(', ');
@@ -1372,7 +1480,7 @@ $('#btnCatSave').addEventListener('click', () => {
   const list = $('#catEdit').value.split(',').map(s => s.trim()).filter(Boolean);
   if (!list.length) return toast('분류를 하나 이상 적어 주세요');
   cats = [...new Set(list)]; lsSet('cats', cats); $('#catEdit').value = cats.join(', ');
-  if (!cats.includes(filterCat) && filterCat !== '__again' && filterCat !== '__hidden') filterCat = '';
+  if (!cats.includes(filterCat) && !filterCat.startsWith('__')) filterCat = '';
   renderAll(); toast('분류를 저장했습니다');
 });
 function applyTheme(t){ if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; }
@@ -1590,7 +1698,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.9.0';
+const APP_VERSION = 'v1.10.0';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
