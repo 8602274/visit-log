@@ -182,6 +182,15 @@ nav button.on{color:var(--accent);font-weight:700}
 .vGuide{font-size:13px;color:var(--sub);line-height:1.8;margin-top:12px}
 .dday{display:inline-block;font-size:11px;font-weight:700;background:#7c3aed;color:#fff;border-radius:6px;padding:0 6px;margin-left:6px;vertical-align:1px}
 .planTop{display:flex;gap:8px;margin:2px 0 10px}.planTop .btn{flex:1}
+/* 일정 목록: 한 줄에 제목·날짜·시간만 작게 */
+.plist{background:var(--card);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;margin-bottom:150px}   /* 아래 둥근 단추에 안 가리게 */
+.item.prow{display:flex;align-items:center;gap:8px;margin:0;padding:8px 12px;border-radius:0;box-shadow:none;background:none;
+  border-top:1px solid var(--line);font-size:13px;line-height:1.35;min-height:0}
+.item.prow:first-child{border-top:0}
+.prow .pn{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow .pd{flex:none;color:var(--sub);font-variant-numeric:tabular-nums}
+.prow .pt{flex:none;width:40px;text-align:right;color:var(--sub);font-variant-numeric:tabular-nums}
+.prow.today .pd,.prow.today .pt{color:var(--accent);font-weight:700}
 .sheet .top{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;align-items:center;
   justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
 .sheet .top h2{font-size:17px;margin:0}
@@ -731,7 +740,7 @@ function renderList(){
   const planTop = filterCat === '__plan'
     ? `<div class="planTop"><button class="btn" id="planAdd">＋ 일정 추가</button><button class="btn primary" id="planVoice">🎤 말로 일정</button></div>` : '';
   if (!arr.length) { $('#list').innerHTML = planTop + `<div class="empty">${filterCat === '__hidden' ? '숨긴 기록이 없습니다.' : filterCat === '__plan' ? '앞으로의 일정이 없습니다.<br>🎤로 “다음 주 토요일 3시 김철수 결혼식”처럼 말해 보세요.' : '조건에 맞는 기록이 없습니다.'}</div>`; return; }
-  if (filterCat === '__plan') { $('#list').innerHTML = planTop + arr.map(itemHtml).join(''); return; }
+  if (filterCat === '__plan') { $('#list').innerHTML = planTop + `<div class="plist">${arr.map(planRowHtml).join('')}</div>`; return; }
   const groupByMonth = ['date','old'].includes($('#sort').value);
   let last = '', html = '', futHead = false;
   const T = today().replace(/\D/g, '');
@@ -745,6 +754,13 @@ function renderList(){
     html += itemHtml(v);
   }
   $('#list').innerHTML = html;
+}
+// 일정 목록 한 줄: 제목 · 날짜 · 시간만 작게 (아이콘·사진 없이 많이 보이게)
+function planRowHtml(v){
+  const d = new Date(v.date + 'T12:00'), wd = '일월화수목금토'[d.getDay()];
+  const ds = `${d.getMonth() + 1}.${d.getDate()}(${wd})${v.dateEnd > v.date ? '~' + (+v.dateEnd.slice(5, 7)) + '.' + (+v.dateEnd.slice(8)) : ''}`;
+  return `<div class="item prow${v.date === today() ? ' today' : ''}" data-id="${v.id}">
+    <span class="pn">${esc(v.name)}</span><span class="pd">${ds}</span><span class="pt">${esc(v.time || '')}</span></div>`;
 }
 function itemHtml(v){
   const n = sameCount(v.name);
@@ -2212,7 +2228,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.13.1';
+const APP_VERSION = 'v1.13.2';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
