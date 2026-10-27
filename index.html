@@ -552,7 +552,9 @@ function filtered(){
   // 최신 = 방문 날짜(형식이 달라도 숫자만 비교) → 같은 날은 나중에 적은 것 위
   const dk = v => String(v.date || '').replace(/\D/g, '');
   const byDate = (a,b) => dk(b).localeCompare(dk(a)) || ((b.created||0) - (a.created||0));
-  if (s === 'date') arr.sort(byDate);
+  // 최신순: 오늘·지난 방문은 최근 날짜가 위 → 그 아래 앞으로 갈 날(가까운 날부터)
+  const T = today().replace(/\D/g, ''), fut = v => dk(v) > T;
+  if (s === 'date') arr.sort((a,b) => fut(a) !== fut(b) ? (fut(a) ? 1 : -1) : fut(a) ? -byDate(a,b) : byDate(a,b));
   else if (s === 'old') arr.sort((a,b) => -byDate(a,b));
   else if (s === 'rating') arr.sort((a,b) => (b.rating||0) - (a.rating||0) || byDate(a,b));
   else arr.sort((a,b) => a.name.localeCompare(b.name, 'ko') || byDate(a,b));
@@ -567,9 +569,12 @@ function renderList(){
   }
   if (!arr.length) { $('#list').innerHTML = `<div class="empty">${filterCat === '__hidden' ? '숨긴 기록이 없습니다.' : '조건에 맞는 기록이 없습니다.'}</div>`; return; }
   const groupByMonth = ['date','old'].includes($('#sort').value);
-  let last = '', html = '';
+  let last = '', html = '', futHead = false;
+  const T = today().replace(/\D/g, '');
   for (const v of arr) {
-    if (groupByMonth) {
+    if ($('#sort').value === 'date' && String(v.date || '').replace(/\D/g, '') > T) {
+      if (!futHead) { html += `<div class="month">📅 앞으로 (예정)</div>`; futHead = true; }
+    } else if (groupByMonth) {
       const m = (v.date||'').slice(0,7);
       if (m !== last) { html += `<div class="month">${m ? m.replace('-','년 ') + '월' : '날짜 없음'}</div>`; last = m; }
     }
@@ -1572,7 +1577,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.7.1';
+const APP_VERSION = 'v1.7.2';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 나의 방문기록 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
