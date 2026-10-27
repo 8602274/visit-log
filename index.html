@@ -1463,6 +1463,11 @@ function renderBigMap(){
   if (pts.length) bigMap.fitBounds(pts, {padding:[40,40], maxZoom:15});
   else bigMap.setView([36.3, 127.8], 7);
 }
+// 폰에서 날짜·시간 칸을 눌러도 달력·시계가 안 뜨는 일이 있어(안드로이드 크롬) 누르면 직접 엶
+document.addEventListener('click', e => {
+  const i = e.target.closest('input[type="date"],input[type="time"]');
+  if (i && !i.disabled && typeof i.showPicker === 'function') { try { i.showPicker(); } catch {} }
+});
 document.addEventListener('click', e => {
   const a = e.target.closest('[data-open]'); if (!a) return;
   e.preventDefault(); openDetail(a.dataset.open);
@@ -1477,6 +1482,7 @@ function initPickMap(){
   }
   setTimeout(() => {
     pickMap.invalidateSize();
+    if (!editing) return;   // 그사이 폼을 닫은 경우
     if (editing.lat != null) { pickMap.setView([editing.lat, editing.lng], 16); }
     else {
       const withPos = visits.filter(v => v.lat != null).sort((a,b) => b.created - a.created)[0];
@@ -2206,7 +2212,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.13.0';
+const APP_VERSION = 'v1.13.1';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
@@ -2237,6 +2243,23 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
     if (!had || done || document.querySelector('.sheet.on')) return;
     done = true; location.reload();
   });
+  // 서비스워커 갱신이 늦거나 멈춰도(폰 홈 화면 앱) 서버의 APP_VERSION을 직접 읽어 다르면 새로고침
+  const checkUpdate = async () => {
+    if (document.querySelector('.sheet.on')) return;   // 입력·상세 화면 중엔 다음에
+    try {
+      const html = await (await fetch(`./?vcheck=${Date.now()}`, {cache: 'no-store'})).text();
+      const v = /const APP_VERSION = '([^']+)'/.exec(html)?.[1];
+      if (!v || v === APP_VERSION) return;
+      let tried = {}; try { tried = JSON.parse(sessionStorage.getItem('updTry') || '{}'); } catch {}
+      if (tried.v === v && Date.now() - tried.t < 120000) return;   // 막 올린 직후 서버가 엇갈려도 되풀이 안 함
+      try { sessionStorage.setItem('updTry', JSON.stringify({v, t: Date.now()})); } catch {}
+      for (const k of await caches.keys()) if (k.startsWith('visit-app-')) await caches.delete(k);
+      (await navigator.serviceWorker.getRegistration())?.update().catch(() => {});
+      toast(`새 버전 ${v}으로 바꿉니다`); setTimeout(() => location.reload(), 600);
+    } catch {}
+  };
+  checkUpdate();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(); });
 }
 let installEvt = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('#btnInstall').style.display = ''; });
