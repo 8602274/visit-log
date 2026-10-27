@@ -182,6 +182,10 @@ nav button.on{color:var(--accent);font-weight:700}
 .vGuide{font-size:13px;color:var(--sub);line-height:1.8;margin-top:12px}
 .dday{display:inline-block;font-size:11px;font-weight:700;background:#7c3aed;color:#fff;border-radius:6px;padding:0 6px;margin-left:6px;vertical-align:1px}
 .planTop{display:flex;gap:8px;margin:2px 0 10px}.planTop .btn{flex:1}
+/* [＋ 일정 추가] 입력 화면: 날짜·시간·메모만 */
+#formSheet.plan .full{display:none!important}
+#fMore{display:none}#formSheet.plan #fMore{display:block}
+#formSheet.plan #fMemo{min-height:140px}
 /* 일정 목록: 한 줄에 제목·날짜·시간만 작게 */
 .plist{background:var(--card);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;margin-bottom:150px}   /* 아래 둥근 단추에 안 가리게 */
 .item.prow{display:flex;align-items:center;gap:8px;margin:0;padding:8px 12px;border-radius:0;box-shadow:none;background:none;
@@ -405,6 +409,7 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
     <button id="fSave">저장</button>
   </div>
   <div class="body">
+    <div class="full">
     <label class="f">장소 이름 * <button class="mic" type="button" data-mic="fName">🎤</button></label>
     <div class="tools" style="margin:0">
       <input id="fName" list="nameList" placeholder="예: 강릉 초당순두부" autocomplete="off">
@@ -412,13 +417,14 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
     </div>
     <div class="hint" id="fPlaceInfo" style="margin-top:4px"></div>
     <datalist id="nameList"></datalist>
+    </div>
 
     <div class="row">
       <div>
-        <label class="f">방문 날짜</label>
+        <label class="f" id="fDateLbl">방문 날짜</label>
         <input id="fDate" type="date">
       </div>
-      <div>
+      <div class="full">
         <label class="f">분류</label>
         <select id="fCat"></select>
       </div>
@@ -428,6 +434,7 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
       <input id="fTime" type="time" step="300">
       <button class="btn" id="fTimeOff" type="button" style="flex:0 0 auto">시간 빼기</button>
     </div>
+    <div class="full">
     <button class="btn" id="fEndBtn" type="button" style="margin-top:8px">🧳 여행 기간 넣기 (언제까지)</button>
     <div id="fEndRow" style="display:none">
       <label class="f">언제까지 (끝나는 날)</label>
@@ -487,10 +494,13 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
 
     <label class="f">함께 간 사람</label>
     <input id="fWith" placeholder="예: 가족, 회사 동료">
+    </div>
 
     <label class="f">메모 <button class="mic" type="button" data-mic="fMemo">🎤</button></label>
     <textarea id="fMemo" placeholder="먹은 메뉴, 가격, 느낀 점, 다음에 할 것…"></textarea>
+    <button class="btn block" id="fMore" type="button" style="margin-top:10px">＋ 다른 항목도 넣기 (장소·분류·경조사·사진…)</button>
 
+    <div class="full">
     <label class="f">사진</label>
     <div class="photos" id="fPhotos"></div>
     <input type="file" id="fFile" accept="image/*" multiple hidden>
@@ -504,6 +514,7 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
     <div id="pickMap"></div>
 
     <label class="toggle"><input type="checkbox" id="fAgain"> 💚 다시 가고 싶은 곳</label>
+    </div>
 
     <div style="height:20px"></div>
     <button class="btn danger block" id="fDelete" style="display:none">이 기록 삭제</button>
@@ -1379,6 +1390,11 @@ function parseVisitSpeech(raw){
 }
 
 let formFromVoice = false;   // 말로 채운 입력 화면은 '다시 방문'이 아니라 새 방문·새 일정
+let formPlanMode = false;    // [＋ 일정 추가]로 여는 중
+$('#fMore').addEventListener('click', () => {
+  $('#formSheet').classList.remove('plan'); $('#fDateLbl').textContent = '방문 날짜';
+  setTimeout(() => pickMap?.invalidateSize(), 50);
+});
 function openVoice(){
   Voice.stop();
   $('#vText').value = ''; $('#vInt').textContent = ''; vPreview();
@@ -1438,7 +1454,12 @@ $('#formSheet').addEventListener('click', e => {
 for (const id of ['#fCancel', '#fSave']) $(id).addEventListener('click', () => Voice.stop(), true);
 // 일정 칩 위 단추
 $('#list').addEventListener('click', e => {
-  if (e.target.closest('#planAdd')) { const d = new Date(today() + 'T12:00'); d.setDate(d.getDate() + 1); openForm(null, {date: ymdOf(d)}); }
+  if (e.target.closest('#planAdd')) {
+    const d = new Date(today() + 'T12:00'); d.setDate(d.getDate() + 1);
+    const etc = cats.find(c => catName(c) === '기타') || cats[cats.length - 1];   // 분류는 안 보이니 '기타'로
+    formPlanMode = true;
+    try { openForm(null, {date: ymdOf(d), cat: etc}); } finally { formPlanMode = false; }
+  }
   else if (e.target.closest('#planVoice')) openVoice();
 });
 
@@ -1579,6 +1600,11 @@ function openForm(v, preset){
     Object.assign({id:uid(), name:'', date:today(), cat:cats[0], rating:0, addr:'', with:'', memo:'', photos:[], lat:null, lng:null, again:false, created:Date.now()}, preset || {});
   const again = !!preset?.name && !preset.fromPlan && !formFromVoice;    // 상세의 [다시 방문] — 달력의 [이날 방문 기록하기]는 날짜만, 약속의 [방문으로 기록]은 약속 내용을 채움
   $('#fTitle').textContent = v ? '기록 수정' : (again ? '다시 방문' : editing.date > today() ? '새 일정' : '새 방문');
+  const plan = !v && formPlanMode;   // [＋ 일정 추가]로 연 화면 = 날짜·시간·메모만
+  $('#formSheet').classList.toggle('plan', plan);
+  $('#fDateLbl').textContent = plan ? '날짜' : '방문 날짜';
+  $('#fMemo').placeholder = plan ? '무슨 일정인지 적으세요 — 첫 줄이 일정 제목이 됩니다' : '먹은 메뉴, 가격, 느낀 점, 다음에 할 것…';
+  if (plan) $('#fTitle').textContent = '새 일정';
   $('#fName').value = editing.name; $('#fDate').value = editing.date; $('#fTime').value = editing.time || '';
   showEnd(editing.dateEnd > editing.date ? editing.dateEnd : '');
   fillCatSelect(editing.cat);
@@ -1590,7 +1616,7 @@ function openForm(v, preset){
   renderRate(); renderPhotos(); showFormPlace();
   $('#formSheet').classList.add('on'); $('#formSheet').scrollTop = 0;
   initPickMap();
-  if (!v && !again) setTimeout(() => $('#fName').focus(), 100);
+  if (!v && !again) setTimeout(() => $(plan ? '#fMemo' : '#fName').focus(), 100);
 }
 // 여행 기간: [🧳 여행 기간 넣기]를 누르면 끝나는 날 칸이 열림. 빈 칸·시작일 이전이면 하루짜리로 저장
 function showEnd(end){
@@ -1805,7 +1831,11 @@ $('#fab').addEventListener('click', () => openForm(null, $('#tab-cal').classList
 $('#fCancel').addEventListener('click', closeForm);
 $('#fTimeOff').addEventListener('click', () => { $('#fTime').value = ''; });
 $('#fSave').addEventListener('click', async () => {
-  const name = $('#fName').value.trim();
+  let name = $('#fName').value.trim();
+  if (!name && $('#formSheet').classList.contains('plan')) {   // 일정: 메모 첫 줄이 제목
+    name = $('#fMemo').value.trim().split('\n')[0].slice(0, 40);
+    if (!name) { toast('무슨 일정인지 메모에 적어 주세요'); $('#fMemo').focus(); return; }
+  }
   if (!name) { toast('장소 이름을 적어 주세요'); $('#fName').focus(); return; }
   Object.assign(editing, {name, date:$('#fDate').value, cat:$('#fCat').value, addr:$('#fAddr').value.trim(),
     with:$('#fWith').value.trim(), memo:$('#fMemo').value, again:$('#fAgain').checked, updated:Date.now()});
@@ -2232,7 +2262,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.13.3';
+const APP_VERSION = 'v1.13.4';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
