@@ -278,6 +278,11 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
       <button class="btn block" id="btnPlanNow" style="margin-top:6px">지금 가져오기</button>
     </div>
     <div class="panel">
+      <h3>숨긴 기록</h3>
+      <p class="hint" id="hiddenInfo">숨긴 기록이 없습니다.</p>
+      <button class="btn block" id="btnShowHidden" style="margin-top:6px">🙈 숨긴 기록 보기</button>
+    </div>
+    <div class="panel">
       <h3>분류 관리</h3>
       <p class="hint">쉼표로 구분해 적으세요. 앞에 이모지를 붙이면 아이콘으로 쓰입니다.</p>
       <textarea id="catEdit" style="min-height:70px"></textarea>
@@ -484,6 +489,7 @@ async function reload(){
 function renderAll(){
   const nh = allVisits.length - visits.length;
   $('#countTxt').textContent = `총 ${visits.length}회 방문${nh ? ` · 숨김 ${nh}` : ''}`;
+  $('#hiddenInfo').textContent = nh ? `숨긴 기록 ${nh}건 — 목록·지도·달력·통계에 안 나옵니다.` : '숨긴 기록이 없습니다.';
   renderChips(); renderList();
   if ($('#tab-map').classList.contains('on')) renderBigMap();
   if ($('#tab-stat').classList.contains('on')) renderStats();
@@ -1307,6 +1313,10 @@ function applyTheme(t){ if (t) document.documentElement.dataset.theme = t; else 
 $('#theme').value = lsGet('theme', ''); applyTheme($('#theme').value);
 $('#theme').addEventListener('change', () => { lsSet('theme', $('#theme').value); applyTheme($('#theme').value); });
 $('#sort').value = lsGet('sort', 'date');
+$('#btnShowHidden').addEventListener('click', () => {
+  filterCat = '__hidden'; selIds.clear(); $('#q').value = '';
+  showTab('list'); renderChips(); renderList();
+});
 
 $('#btnExport').addEventListener('click', () => {
   const data = JSON.stringify({app:'visit-log', version:1, exported:new Date().toISOString(), cats, visits: allVisits, plans, plansGone:[...plansGone]});
@@ -1514,7 +1524,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.6.0';
+const APP_VERSION = 'v1.6.1';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 나의 방문기록 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
