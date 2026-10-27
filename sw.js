@@ -1,5 +1,5 @@
 // 오프라인 캐시. 앱 파일을 고치면 VERSION을 올릴 것.
-const VERSION = 'v1.8.0';
+const VERSION = 'v1.8.1';
 const APP = 'visit-app-' + VERSION;
 const TILES = 'visit-tiles';
 const TILE_MAX = 600;
@@ -14,7 +14,7 @@ const CORE = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(APP).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(APP).then(c => c.addAll(CORE.map(u => new Request(u, {cache: 'reload'})))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()
@@ -37,7 +37,7 @@ self.addEventListener('fetch', e => {
 
   // 앱 화면: 인터넷 되면 최신본, 안 되면 저장본
   if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).then(r => {
+    e.respondWith(fetch(req, {cache: 'no-cache'}).then(r => {   // 브라우저 HTTP 캐시(10분) 건너뛰고 서버에 확인
       const copy = r.clone(); caches.open(APP).then(c => c.put('./index.html', copy)); return r;
     }).catch(() => caches.match('./index.html')));
     return;

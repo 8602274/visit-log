@@ -1590,7 +1590,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.8.0';
+const APP_VERSION = 'v1.8.1';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 나의 방문기록 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
@@ -1609,8 +1609,18 @@ $('#btnShare').addEventListener('click', async () => {
     toast('안내 문구를 복사했습니다. 카톡에 붙여 넣으세요');
   } catch (err) { if (err?.name !== 'AbortError') toast('공유하지 못했습니다'); }
 });
+// 새 버전이 올라오면 열 때·다시 볼 때 확인해서 바로 바꿈 (입력·상세 화면이 열려 있으면 기다림)
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  const had = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js', {updateViaCache: 'none'}).then(reg => {
+    reg.update().catch(() => {});
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+  }).catch(() => {});
+  let done = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!had || done || document.querySelector('.sheet.on')) return;
+    done = true; location.reload();
+  });
 }
 let installEvt = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('#btnInstall').style.display = ''; });
