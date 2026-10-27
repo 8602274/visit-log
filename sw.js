@@ -1,5 +1,5 @@
 // 오프라인 캐시. 앱 파일을 고치면 VERSION을 올릴 것.
-const VERSION = 'v1.13.4';
+const VERSION = 'v1.13.5';
 const APP = 'visit-app-' + VERSION;
 const TILES = 'visit-tiles';
 const TILE_MAX = 600;
