@@ -356,6 +356,15 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
         <select id="fCat"></select>
       </div>
     </div>
+    <button class="btn" id="fEndBtn" type="button" style="margin-top:8px">🧳 여행 기간 넣기 (언제까지)</button>
+    <div id="fEndRow" style="display:none">
+      <label class="f">언제까지 (끝나는 날)</label>
+      <div class="tools" style="margin:0">
+        <input id="fDateEnd" type="date">
+        <button class="btn" id="fEndOff" type="button" style="flex:0 0 auto">기간 빼기</button>
+      </div>
+      <div class="hint" id="fEndInfo" style="margin-top:4px"></div>
+    </div>
 
     <label class="f">별점</label>
     <div class="rate" id="fRate"></div>
@@ -435,6 +444,18 @@ const DEFAULT_CATS = ['🍜 맛집','☕ 카페','🏞️ 명소','✈️ 여행
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0,10); };
+// 여행 기간: date = 시작일, dateEnd = 끝나는 날(하루짜리는 없음)
+const dayDiff = (a, b) => Math.round((new Date(b + 'T00:00') - new Date(a + 'T00:00')) / 864e5);
+const nightsStr = (a, b) => { const n = dayDiff(a, b); return `${n}박 ${n + 1}일`; };
+const periodStr = v => v.dateEnd && v.dateEnd > v.date
+  ? `${v.date} ~ ${v.dateEnd.slice(0,4) === (v.date||'').slice(0,4) ? v.dateEnd.slice(5) : v.dateEnd} (${nightsStr(v.date, v.dateEnd)})` : (v.date || '');
+const visitDays = v => {
+  if (!v.date) return [];
+  if (!(v.dateEnd > v.date)) return [v.date];
+  const out = [], d = new Date(v.date + 'T12:00');
+  for (let i = 0; i <= dayDiff(v.date, v.dateEnd) && i < 366; i++) { out.push(d.toISOString().slice(0,10)); d.setDate(d.getDate() + 1); }
+  return out;
+};
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 const starStr = n => n ? '★'.repeat(n) + '☆'.repeat(5-n) : '';
 const catIcon = c => { const m = /^(\p{Extended_Pictographic}[️‍\p{Extended_Pictographic}]*)\s*/u.exec(c||''); return m ? m[1] : '📍'; };
@@ -559,7 +580,7 @@ function itemHtml(v){
       <div class="thumb">${v.photos?.length ? `<img src="${v.photos[0]}" alt="">` : catIcon(v.cat)}</div>
       <div class="info">
         <div class="name">${v.hidden ? '🙈 ' : ''}${esc(v.name)}${n > 1 && !v.hidden ? `<span class="badge">${visitNo(v)}/${n}회</span>` : ''}${v.again ? ' 💚' : ''}</div>
-        <div class="meta">${esc(v.date||'')} · ${esc(catName(v.cat))}${v.addr ? ' · ' + esc(v.addr) : ''}</div>
+        <div class="meta">${esc(periodStr(v))} ·${esc(catName(v.cat))}${v.addr ? ' · ' + esc(v.addr) : ''}</div>
         ${v.rating ? `<div class="stars">${starStr(v.rating)}</div>` : ''}
       </div></div>`;
 }
@@ -683,8 +704,8 @@ function renderCal(){
   const [y, m] = calMonth.split('-').map(Number);
   $('#calTitle').textContent = `${y}년 ${m}월`;
   const byDay = {};
-  for (const v of visits) if ((v.date||'').startsWith(calMonth)) (byDay[v.date] = byDay[v.date] || []).push(v);
-  const n = Object.values(byDay).reduce((s, a) => s + a.length, 0);
+  for (const v of visits) for (const day of visitDays(v)) if (day.startsWith(calMonth)) (byDay[day] = byDay[day] || []).push(v);     // 여행 기간은 날마다 표시
+  const n = new Set(Object.values(byDay).flat().map(v => v.id)).size;
   const places = new Set(Object.values(byDay).flat().map(v => v.name)).size;
   const pDay = plansByDay(calMonth);
   const np = Object.values(pDay).reduce((s, a) => s + a.length, 0);
@@ -1131,6 +1152,7 @@ function openForm(v, preset){
   const again = !!preset?.name && !preset.fromPlan;    // 상세의 [다시 방문] — 달력의 [이날 방문 기록하기]는 날짜만, 약속의 [방문으로 기록]은 약속 내용을 채움
   $('#fTitle').textContent = v ? '기록 수정' : (again ? '다시 방문' : '새 방문');
   $('#fName').value = editing.name; $('#fDate').value = editing.date;
+  showEnd(editing.dateEnd > editing.date ? editing.dateEnd : '');
   fillCatSelect(editing.cat);
   $('#fAddr').value = editing.addr; $('#fWith').value = editing.with; $('#fMemo').value = editing.memo;
   $('#fAgain').checked = !!editing.again;
@@ -1140,6 +1162,25 @@ function openForm(v, preset){
   initPickMap();
   if (!v && !again) setTimeout(() => $('#fName').focus(), 100);
 }
+// 여행 기간: [🧳 여행 기간 넣기]를 누르면 끝나는 날 칸이 열림. 빈 칸·시작일 이전이면 하루짜리로 저장
+function showEnd(end){
+  $('#fDateEnd').value = end;
+  $('#fEndRow').style.display = end ? '' : 'none';
+  $('#fEndBtn').style.display = end ? 'none' : '';
+  endInfo();
+}
+function endInfo(){
+  const a = $('#fDate').value, b = $('#fDateEnd').value;
+  $('#fDateEnd').min = a;
+  $('#fEndInfo').textContent = a && b ? (b > a ? `✈️ ${nightsStr(a, b)} — 달력에 날마다 표시됩니다` : '끝나는 날이 시작일보다 뒤여야 합니다') : '';
+}
+$('#fEndBtn').addEventListener('click', () => {
+  const a = $('#fDate').value || today(), d = new Date(a + 'T12:00'); d.setDate(d.getDate() + 1);
+  showEnd(d.toISOString().slice(0,10)); $('#fDateEnd').focus();
+});
+$('#fEndOff').addEventListener('click', () => showEnd(''));
+$('#fDate').addEventListener('change', endInfo);
+$('#fDateEnd').addEventListener('change', endInfo);
 function showFormPlace(){
   const p = editing?.place;
   $('#fPlaceInfo').textContent = p ? `🔗 ${p.name}${p.cat ? ' · ' + p.cat : ''}${p.phone ? ' · ' + p.phone : ''}` : '';
@@ -1168,6 +1209,9 @@ $('#fSave').addEventListener('click', async () => {
   if (!name) { toast('장소 이름을 적어 주세요'); $('#fName').focus(); return; }
   Object.assign(editing, {name, date:$('#fDate').value, cat:$('#fCat').value, addr:$('#fAddr').value.trim(),
     with:$('#fWith').value.trim(), memo:$('#fMemo').value, again:$('#fAgain').checked, updated:Date.now()});
+  const end = $('#fEndRow').style.display !== 'none' ? $('#fDateEnd').value : '';
+  if (end && end <= editing.date) { toast('끝나는 날이 시작일보다 뒤여야 합니다'); $('#fDateEnd').focus(); return; }
+  if (end) editing.dateEnd = end; else delete editing.dateEnd;
   const fromPlan = editing.fromPlan; delete editing.fromPlan;
   try { await DB.put(editing); } catch (err) { toast('저장 실패: 저장 공간이 부족할 수 있습니다'); return; }
   if (fromPlan) { delete plans[fromPlan]; plansGone.add(fromPlan); markGone(fromPlan); savePlans(); }     // 약속 → 방문 기록이 되면 약속은 뺌
@@ -1195,7 +1239,7 @@ function openDetail(id){
     <div class="dName">${catIcon(v.cat)} ${esc(v.name)} ${v.again ? '💚' : ''}</div>
     ${v.rating ? `<div class="stars" style="font-size:20px">${starStr(v.rating)}</div>` : ''}
     <div class="dMeta">
-      📅 ${esc(v.date||'')} ${hist.length > 1 ? `(${visitNo(v)}번째 방문)` : ''}<br>
+      📅 ${esc(periodStr(v))} ${hist.length > 1 ? `(${visitNo(v)}번째 방문)` : ''}<br>
       🏷️ ${esc(catName(v.cat))}
       ${v.place?.cat ? `<br>🍽️ ${esc(v.place.cat)}` : ''}
       ${v.addr ? `<br>📌 ${esc(v.addr)}` : ''}
@@ -1524,7 +1568,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.6.1';
+const APP_VERSION = 'v1.7.0';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 나의 방문기록 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
