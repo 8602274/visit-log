@@ -188,6 +188,7 @@ nav button.on{color:var(--accent);font-weight:700}
   border-top:1px solid var(--line);font-size:13px;line-height:1.35;min-height:0}
 .item.prow:first-child{border-top:0}
 .prow .pn{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow .dday{flex:none;margin-left:0}
 .prow .pd{flex:none;color:var(--sub);font-variant-numeric:tabular-nums}
 .prow .pt{flex:none;width:40px;text-align:right;color:var(--sub);font-variant-numeric:tabular-nums}
 .prow.today .pd,.prow.today .pt{color:var(--accent);font-weight:700}
@@ -676,11 +677,13 @@ function renderAll(){
 }
 // 일정 = 오늘이거나 앞으로의 날짜(여행은 끝나는 날까지)
 const isUpcoming = v => (v.dateEnd > v.date ? v.dateEnd : v.date || '') >= today();
-function ddayHtml(v){
+// D-day는 일주일 안(오늘~7일 뒤)만 표시
+function ddayText(v){
   if (!v.date || v.date < today()) return '';
   const n = dayDiff(today(), v.date);
-  return `<span class="dday">${n === 0 ? '오늘' : n === 1 ? '내일' : 'D-' + n}</span>`;
+  return n > 7 ? '' : n === 0 ? '오늘' : n === 1 ? '내일' : 'D-' + n;
 }
+function ddayHtml(v){ const t = ddayText(v); return t ? `<span class="dday">${t}</span>` : ''; }
 const visitNo = v => visits.filter(x => x.name === v.name && (x.date < v.date || (x.date === v.date && x.created <= v.created))).length;
 const sameCount = name => visits.filter(x => x.name === name).length;
 const findVisit = id => allVisits.find(x => x.id === id);
@@ -759,8 +762,9 @@ function renderList(){
 function planRowHtml(v){
   const d = new Date(v.date + 'T12:00'), wd = '일월화수목금토'[d.getDay()];
   const ds = `${d.getMonth() + 1}.${d.getDate()}(${wd})${v.dateEnd > v.date ? '~' + (+v.dateEnd.slice(5, 7)) + '.' + (+v.dateEnd.slice(8)) : ''}`;
+  const dd = ddayText(v);
   return `<div class="item prow${v.date === today() ? ' today' : ''}" data-id="${v.id}">
-    <span class="pn">${esc(v.name)}</span><span class="pd">${ds}</span><span class="pt">${esc(v.time || '')}</span></div>`;
+    <span class="pn">${esc(v.name)}</span>${dd ? `<span class="dday">${dd}</span>` : ''}<span class="pd">${ds}</span><span class="pt">${esc(v.time || '')}</span></div>`;
 }
 function itemHtml(v){
   const n = sameCount(v.name);
@@ -2228,7 +2232,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.13.2';
+const APP_VERSION = 'v1.13.3';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
