@@ -163,7 +163,25 @@ nav button.on{color:var(--accent);font-weight:700}
 .sheet{position:fixed;inset:0;z-index:50;background:var(--bg);overflow-y:auto;display:none}
 .sheet.on{display:block}
 /* 겹치는 순서: 상세(50) < 입력·수정 폼(60) < 장소 찾기(70) < 사진 보기(80) — 상세에서 [수정]을 누르면 폼이 위로 */
-#formSheet{z-index:60}#placeSheet{z-index:70}
+#formSheet{z-index:60}#placeSheet{z-index:70}#voiceSheet{z-index:65}
+/* 말로 기록 */
+#fabMic{bottom:calc(152px + env(safe-area-inset-bottom));width:50px;height:50px;font-size:24px;right:22px;background:#7c3aed}
+.mic{border:1px solid var(--line);background:var(--card);border-radius:999px;font-size:13px;padding:2px 10px;cursor:pointer;color:var(--text);margin-left:6px;font-family:inherit;vertical-align:1px}
+.mic.rec{background:#dc2626;border-color:#dc2626;color:#fff;animation:vpulse 1.2s infinite}
+@keyframes vpulse{50%{opacity:.6}}
+#liveBar{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:90;background:#dc2626;color:#fff;border-radius:12px;padding:10px 14px;font-size:14px;display:none;box-shadow:0 4px 12px rgba(0,0,0,.25)}
+#liveBar.on{display:block}
+#vMic{width:110px;height:110px;border-radius:50%;border:0;background:#7c3aed;color:#fff;font-size:48px;cursor:pointer;margin:6px auto 4px;display:block;box-shadow:0 6px 18px rgba(0,0,0,.2)}
+#vMic.rec{background:#dc2626;animation:vpulse 1.2s infinite}
+#vState{text-align:center;font-size:14px;color:var(--sub);margin-bottom:10px;min-height:20px}
+#vInt{min-height:22px;color:#7c3aed;font-size:15px;margin:4px 2px}
+#vText{min-height:110px;font-size:16px;line-height:1.7}
+#vPrev{background:var(--card);border-radius:12px;padding:10px 12px;margin-top:10px;font-size:14px;line-height:1.9;box-shadow:var(--shadow)}
+#vPrev b{display:inline-block;min-width:64px;color:var(--sub);font-weight:600}
+#vPrev .none{color:var(--sub)}
+.vGuide{font-size:13px;color:var(--sub);line-height:1.8;margin-top:12px}
+.dday{display:inline-block;font-size:11px;font-weight:700;background:#7c3aed;color:#fff;border-radius:6px;padding:0 6px;margin-left:6px;vertical-align:1px}
+.planTop{display:flex;gap:8px;margin:2px 0 10px}.planTop .btn{flex:1}
 .sheet .top{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;align-items:center;
   justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
 .sheet .top h2{font-size:17px;margin:0}
@@ -324,6 +342,35 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
 </main>
 
 <button class="fab" id="fab" aria-label="새 방문 기록">＋</button>
+<button class="fab" id="fabMic" aria-label="말로 기록">🎤</button>
+<div id="liveBar"></div>
+
+<!-- 말로 기록: 말한 내용에서 날짜·시간·분류·경조사·장소를 찾아 입력 화면에 채움 -->
+<div class="sheet" id="voiceSheet">
+  <div class="top">
+    <button id="vClose">닫기</button>
+    <h2>🎤 말로 기록</h2>
+    <button id="vGo">입력 화면 ›</button>
+  </div>
+  <div class="body">
+    <button id="vMic">🎤</button>
+    <div id="vState">눌러서 말하기</div>
+    <div id="vInt"></div>
+    <textarea id="vText" placeholder="말한 내용이 여기에 적힙니다. 직접 고쳐도 됩니다."></textarea>
+    <div id="vPrev"></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="vClear">지우기</button>
+      <button class="btn primary" id="vGo2">이대로 입력 화면 열기</button>
+    </div>
+    <div class="vGuide">
+      예) “<b>다음 주 토요일 오후 3시 강남 더채플에서 김철수 결혼식 10만원 회사 동료</b>”<br>
+      예) “<b>어제 점심 강릉 초당순두부 맛있었다</b>” · “<b>내일 저녁 7시 거래처 회식 삼겹살집</b>”<br>
+      날짜(오늘·내일·모레·다음 주 금요일·10월 31일), 시간(오후 3시 반), 분류(결혼식·장례식·맛집·카페…),
+      경조사 누구·관계·금액, 장소(“○○에서”)를 찾아 채웁니다. 앞으로의 날짜면 <b>일정</b>으로 들어갑니다.
+      말한 문장은 메모에 그대로 남습니다. 입력 화면에서 확인하고 저장하세요.
+    </div>
+  </div>
+</div>
 
 <div class="selBar" id="selBar"><div class="in">
   <span class="n" id="selN">0개 선택</span>
@@ -348,7 +395,7 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
     <button id="fSave">저장</button>
   </div>
   <div class="body">
-    <label class="f">장소 이름 *</label>
+    <label class="f">장소 이름 * <button class="mic" type="button" data-mic="fName">🎤</button></label>
     <div class="tools" style="margin:0">
       <input id="fName" list="nameList" placeholder="예: 강릉 초당순두부" autocomplete="off">
       <button class="btn" id="fFind" type="button" style="flex:0 0 auto">🔍 찾기</button>
@@ -431,7 +478,7 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
     <label class="f">함께 간 사람</label>
     <input id="fWith" placeholder="예: 가족, 회사 동료">
 
-    <label class="f">메모</label>
+    <label class="f">메모 <button class="mic" type="button" data-mic="fMemo">🎤</button></label>
     <textarea id="fMemo" placeholder="먹은 메뉴, 가격, 느낀 점, 다음에 할 것…"></textarea>
 
     <label class="f">사진</label>
@@ -618,13 +665,22 @@ function renderAll(){
   const opts = k => [...new Set(visits.flatMap(v => [v.gift?.[k], ...(v.recv || []).map(r => r[k])]).filter(Boolean))].map(n => `<option value="${esc(n)}">`).join('');
   $('#giftWhoList').innerHTML = opts('who'); $('#giftRelList').innerHTML = opts('rel');
 }
+// 일정 = 오늘이거나 앞으로의 날짜(여행은 끝나는 날까지)
+const isUpcoming = v => (v.dateEnd > v.date ? v.dateEnd : v.date || '') >= today();
+function ddayHtml(v){
+  if (!v.date || v.date < today()) return '';
+  const n = dayDiff(today(), v.date);
+  return `<span class="dday">${n === 0 ? '오늘' : n === 1 ? '내일' : 'D-' + n}</span>`;
+}
 const visitNo = v => visits.filter(x => x.name === v.name && (x.date < v.date || (x.date === v.date && x.created <= v.created))).length;
 const sameCount = name => visits.filter(x => x.name === name).length;
 const findVisit = id => allVisits.find(x => x.id === id);
 
 /* ---------- 목록 ---------- */
 function renderChips(){
+  const nPlan = visits.filter(isUpcoming).length;
   const html = [`<button class="chip ${filterCat===''?'on':''}" data-c="">전체</button>`,
+    `<button class="chip ${filterCat==='__plan'?'on':''}" data-c="__plan">📅 일정${nPlan ? ' ' + nPlan : ''}</button>`,
     `<button class="chip ${filterCat==='__again'?'on':''}" data-c="__again">💚 또 갈 곳</button>`,
     `<button class="chip ${filterCat==='__gift'?'on':''}" data-c="__gift">💐 경조사</button>`]
     .concat(cats.map(c => `<button class="chip ${filterCat===c?'on':''}" data-c="${esc(c)}">${esc(c)}</button>`));
@@ -647,6 +703,7 @@ function filtered(){
   let arr = base.filter(v => {
     if (filterCat === '__again' && !v.again) return false;
     if (filterCat === '__gift' && !v.gift && !v.recv) return false;
+    if (filterCat === '__plan' && !isUpcoming(v)) return false;
     if (filterCat && !filterCat.startsWith('__') && v.cat !== filterCat) return false;
     if (q && ![v.name, v.addr, v.memo, v.with, v.cat, v.gift?.who, v.gift?.rel, ...(v.recv || []).flatMap(r => [r.who, r.rel])].join(' ').toLowerCase().includes(q)) return false;
     return true;
@@ -657,7 +714,8 @@ function filtered(){
   const byDate = (a,b) => dk(b).localeCompare(dk(a)) || (b.time||'').localeCompare(a.time||'') || ((b.created||0) - (a.created||0));
   // 최신순: 오늘·지난 방문은 최근 날짜가 위 → 그 아래 앞으로 갈 날(가까운 날부터)
   const T = today().replace(/\D/g, ''), fut = v => dk(v) > T;
-  if (s === 'date') arr.sort((a,b) => fut(a) !== fut(b) ? (fut(a) ? 1 : -1) : fut(a) ? -byDate(a,b) : byDate(a,b));
+  if (filterCat === '__plan') arr.sort((a,b) => -byDate(a,b));   // 일정: 가까운 날·이른 시간부터
+  else if (s === 'date') arr.sort((a,b) => fut(a) !== fut(b) ? (fut(a) ? 1 : -1) : fut(a) ? -byDate(a,b) : byDate(a,b));
   else if (s === 'old') arr.sort((a,b) => -byDate(a,b));
   else if (s === 'rating') arr.sort((a,b) => (b.rating||0) - (a.rating||0) || byDate(a,b));
   else arr.sort((a,b) => a.name.localeCompare(b.name, 'ko') || byDate(a,b));
@@ -666,11 +724,14 @@ function filtered(){
 function renderList(){
   const arr = filtered();
   $('#list').classList.toggle('sel', selMode); renderSelBar(arr);
-  if (!allVisits.length) {
+  if (!allVisits.length && filterCat !== '__plan') {
     $('#list').innerHTML = `<div class="empty">아직 기록이 없어요.<br>오른쪽 아래 <b>＋</b> 버튼으로 첫 방문을 남겨 보세요.</div>`;
     return;
   }
-  if (!arr.length) { $('#list').innerHTML = `<div class="empty">${filterCat === '__hidden' ? '숨긴 기록이 없습니다.' : '조건에 맞는 기록이 없습니다.'}</div>`; return; }
+  const planTop = filterCat === '__plan'
+    ? `<div class="planTop"><button class="btn" id="planAdd">＋ 일정 추가</button><button class="btn primary" id="planVoice">🎤 말로 일정</button></div>` : '';
+  if (!arr.length) { $('#list').innerHTML = planTop + `<div class="empty">${filterCat === '__hidden' ? '숨긴 기록이 없습니다.' : filterCat === '__plan' ? '앞으로의 일정이 없습니다.<br>🎤로 “다음 주 토요일 3시 김철수 결혼식”처럼 말해 보세요.' : '조건에 맞는 기록이 없습니다.'}</div>`; return; }
+  if (filterCat === '__plan') { $('#list').innerHTML = planTop + arr.map(itemHtml).join(''); return; }
   const groupByMonth = ['date','old'].includes($('#sort').value);
   let last = '', html = '', futHead = false;
   const T = today().replace(/\D/g, '');
@@ -691,7 +752,7 @@ function itemHtml(v){
       <span class="chk">✓</span>
       <div class="thumb">${v.photos?.length ? `<img src="${v.photos[0]}" alt="">` : catIcon(v.cat)}</div>
       <div class="info">
-        <div class="name">${v.hidden ? '🙈 ' : ''}${esc(v.name)}${n > 1 && !v.hidden ? `<span class="badge">${visitNo(v)}/${n}회</span>` : ''}${v.again ? ' 💚' : ''}</div>
+        <div class="name">${v.hidden ? '🙈 ' : ''}${esc(v.name)}${n > 1 && !v.hidden ? `<span class="badge">${visitNo(v)}/${n}회</span>` : ''}${v.again ? ' 💚' : ''}${ddayHtml(v)}</div>
         <div class="meta">${esc(periodStr(v))} ·${esc(catName(v.cat))}${v.addr ? ' · ' + esc(v.addr) : ''}</div>
         ${v.gift ? `<div class="meta">💐 ${esc(giftStr(v.gift))}</div>` : ''}
         ${v.recv ? `<div class="meta">🎁 받음 ${v.recv.length}명${recvSum(v.recv) ? ' · ' + won(recvSum(v.recv)) : ''}</div>` : ''}
@@ -733,7 +794,7 @@ function twice(b, ask){
 function setSelMode(on){
   selMode = on; selIds.clear();
   $('#btnSel').textContent = on ? '완료' : '선택';
-  $('#fab').style.display = on ? 'none' : '';
+  $('#fab').style.display = $('#fabMic').style.display = on ? 'none' : '';
   renderList();
 }
 function renderSelBar(arr){
@@ -1135,13 +1196,239 @@ $('#calList').addEventListener('click', e => {
   }, {passive:true});
 })();
 
+/* ---------- 말로 기록 ----------
+   음성 인식: 한 마디(잠깐 쉼)마다 끝나는 방식으로 켜고 말하는 동안 다시 켬
+   (연속 모드는 안드로이드 크롬에서 같은 말이 겹쳐 나오는 일이 있어 안 씀) */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const Voice = {
+  rec: null, on: false, key: null, h: null,
+  start(key, h){
+    if (!SR) { toast('이 브라우저는 음성 인식이 안 됩니다 — 키보드의 🎤(음성 입력)를 쓰세요'); return false; }
+    this.stop();
+    this.on = true; this.key = key; this.h = h;
+    this._go(); h.state?.(true);
+    return true;
+  },
+  _go(){
+    const r = new SR(), h = this.h;
+    r.lang = 'ko-KR'; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
+    r.onresult = e => {
+      let fin = '', mid = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) fin += t; else mid += t;
+      }
+      h.interim?.(mid);
+      if (fin.trim()) { h.interim?.(''); h.final(fin.trim()); }
+    };
+    r.onerror = e => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { toast('마이크 사용을 허용해 주세요'); this.stop(); }
+      else if (e.error === 'network') { toast('음성 인식은 인터넷이 연결돼 있어야 합니다'); this.stop(); }
+      else if (e.error === 'audio-capture') { toast('마이크를 찾을 수 없습니다'); this.stop(); }
+    };
+    r.onend = () => { if (this.on && this.rec === r) setTimeout(() => { if (this.on && this.rec === r) this._go(); }, 120); };
+    this.rec = r;
+    try { r.start(); } catch {}
+  },
+  stop(){
+    const was = this.on, h = this.h, r = this.rec;
+    this.on = false; this.rec = null; this.key = null;
+    try { r && r.stop(); } catch {}
+    if (was) { h?.interim?.(''); h?.state?.(false); }
+  }
+};
+
+// 말한 문장 → {date, time, cat, gift:{who,rel,amount}, name, memo}
+const SINO = {일:1, 이:2, 삼:3, 사:4, 오:5, 육:6, 칠:7, 팔:8, 구:9};
+function korNum(s){   // 3 · 삼십 · 이십오 · 백 → 숫자
+  s = String(s).replace(/,/g, '');
+  if (/^\d+$/.test(s)) return +s;
+  let n = 0, cur = 0;
+  for (const ch of s) {
+    if (ch === '백') { n += (cur || 1) * 100; cur = 0; }
+    else if (ch === '십') { n += (cur || 1) * 10; cur = 0; }
+    else if (SINO[ch]) cur = SINO[ch];
+    else return NaN;
+  }
+  return n + cur;
+}
+const NATIVE = {열두:12, 열한:11, 열:10, 아홉:9, 여덟:8, 일곱:7, 여섯:6, 다섯:5, 네:4, 세:3, 두:2, 한:1};
+const ymdOf = d => { const x = new Date(d); x.setMinutes(x.getMinutes() - x.getTimezoneOffset()); return x.toISOString().slice(0, 10); };
+const plusDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const CAT_WORDS = [
+  [/결혼식|예식장|예식|웨딩|결혼/, ['결혼', '웨딩']], [/장례식|장례|조문|빈소|발인|문상/, ['장례', '조문']],
+  [/돌잔치/, ['돌잔치', '잔치']], [/칠순|팔순|회갑|환갑/, ['칠순', '팔순', '회갑', '환갑', '잔치']], [/병문안|문병/, ['병문안']],
+  [/카페|커피/, ['카페']], [/맛집|식당|회식|점심|저녁\s?식사|밥|고깃집|삼겹살|횟집|국밥/, ['맛집', '식당']],
+  [/여행/, ['여행']], [/호텔|펜션|숙소|리조트|캠핑/, ['숙소']], [/쇼핑|마트|백화점|아울렛|시장/, ['쇼핑']],
+  [/성당|교회|성지|사찰|절에|미사|예배/, ['성지']], [/공원|전시|박물관|미술관|축제|명소|구경/, ['명소']],
+];
+const EVENT = '결혼식|결혼|장례식|장례|조문|돌잔치|칠순|팔순|회갑|환갑|병문안';
+const FAMILY = /^(아들|딸|아버님|어머님|아버지|어머니|부친|모친|장인|장모|시아버지|시어머니|부모님|할머니|할아버지|남편|아내|손자|손녀)$/;
+const REL = /(회사\s?동료|직장\s?동료|동료|친구|친척|사촌|거래처|이웃|동창|선배|후배|지인|가족|교회\s?분|성당\s?분|모임)/;
+
+function parseVisitSpeech(raw){
+  const out = {};
+  let t = ' ' + raw.replace(/[.,!?]/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+  const take = re => { const m = re.exec(t); if (m) t = t.slice(0, m.index) + ' ' + t.slice(m.index + m[0].length); return m; };
+  const base = new Date(today() + 'T12:00');
+  let m;
+  // 날짜
+  if (take(/\s(오늘|금일)/)) out.date = today();
+  else if (take(/\s(내일|명일)/)) out.date = ymdOf(plusDays(base, 1));
+  else if (take(/\s모레/)) out.date = ymdOf(plusDays(base, 2));
+  else if (take(/\s글피/)) out.date = ymdOf(plusDays(base, 3));
+  else if (take(/\s어제/)) out.date = ymdOf(plusDays(base, -1));
+  else if (take(/\s(그저께|그제)/)) out.date = ymdOf(plusDays(base, -2));
+  else if (m = take(/(\d{4})\s?년\s?(\d{1,2})\s?월\s?(\d{1,2})\s?일/)) out.date = `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  else if (m = take(/(\d{1,2}|[일이삼사오육칠팔구십]+)\s?월\s?(\d{1,2}|[일이삼사오육칠팔구십]+)\s?일/)) {
+    const mo = korNum(m[1]), d = korNum(m[2]);
+    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) out.date = `${base.getFullYear()}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }
+  else if (m = take(/(이번\s?주|다음\s?주|담주|다다음\s?주|지난\s?주|저번\s?주)?\s?([일월화수목금토])요일/)) {
+    const w = (m[1] || '').replace(/\s/g, ''), target = '일월화수목금토'.indexOf(m[2]), dow = base.getDay();
+    const monday = plusDays(base, -((dow + 6) % 7)), idx = (target + 6) % 7;
+    const d = w === '이번주' ? plusDays(monday, idx) : w === '다음주' || w === '담주' ? plusDays(monday, idx + 7)
+      : w === '다다음주' ? plusDays(monday, idx + 14) : w === '지난주' || w === '저번주' ? plusDays(monday, idx - 7)
+      : plusDays(base, (target - dow + 7) % 7);   // 그냥 "토요일" = 오늘부터 가장 가까운 토요일
+    out.date = ymdOf(d);
+  }
+  else if (m = take(/(\d+|[일이삼사오육칠팔구십]+)\s?(일|주)\s?(뒤|후)/)) out.date = ymdOf(plusDays(base, korNum(m[1]) * (m[2] === '주' ? 7 : 1)));
+  else if (take(/일주일\s?(뒤|후)/)) out.date = ymdOf(plusDays(base, 7));
+  else if (m = take(/\s(\d{1,2}|[일이삼사오육칠팔구십]+)\s?일(?=\s|에|날)/)) {   // "15일" = 이번 달(지났으면 다음 달)
+    const d = korNum(m[1]);
+    if (d >= 1 && d <= 31) {
+      let x = new Date(base.getFullYear(), base.getMonth(), d, 12);
+      if (ymdOf(x) < today()) x = new Date(base.getFullYear(), base.getMonth() + 1, d, 12);
+      out.date = ymdOf(x);
+    }
+  }
+  // 시간
+  if (m = take(/(\d{1,2}):(\d{2})/)) out.time = `${m[1].padStart(2, '0')}:${m[2]}`;
+  else if (m = take(/(오전|오후|아침|낮|저녁|밤|새벽)?\s?(\d{1,2}|열두|열한|열|아홉|여덟|일곱|여섯|다섯|네|세|두|한)\s?시\s?(반|(\d{1,2})\s?분)?/)) {
+    let h = /^\d+$/.test(m[2]) ? +m[2] : NATIVE[m[2]];
+    const ap = m[1] || '', mi = m[3] === '반' ? 30 : +(m[4] || 0);
+    if (/오후|저녁|밤/.test(ap) && h < 12) h += 12;
+    else if (/오전|아침|새벽/.test(ap) && h === 12) h = 0;
+    else if (ap === '낮' && h < 6) h += 12;
+    else if (!ap && h >= 1 && h <= 7) h += 12;     // "3시" = 오후 3시로 봄
+    if (h <= 23 && mi <= 59) out.time = `${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}`;
+  }
+  else if (take(/(점심)/)) out.time = '12:00';
+  // 금액
+  // 숫자는 말 첫머리에서만("친구 만나기"의 '구 만'을 9만으로 읽지 않게), 만·천 뒤엔 '원'이나 띄어쓰기
+  if (m = take(/(축의금|부의금|조의금|봉투)?\s?(?<=\s)([\d,]+|[일이삼사오육칠팔구십백]+)\s?(만|천)(?=원|\s)\s?원?/)) {
+    const n = korNum(m[2]); if (n) out.amount = n * (m[3] === '만' ? 10000 : 1000);
+  } else if (m = take(/(축의금|부의금|조의금)?\s?([\d,]{4,})\s?원/)) out.amount = +m[2].replace(/,/g, '');
+  t = t.replace(/축의금|부의금|조의금|봉투/g, ' ');
+  // 분류
+  for (const [re, keys] of CAT_WORDS) if (re.test(t)) {
+    const c = cats.find(c => keys.some(k => catName(c).includes(k)));
+    if (c) { out.cat = c; break; }
+  }
+  // 경조사: "김철수 결혼식", "김과장 아들 결혼식", "박부장님 부친상"
+  const rel = REL.exec(t); if (rel) { out.rel = rel[1].replace(/\s/g, ' '); t = t.replace(rel[0], ' '); }
+  m = new RegExp(`([가-힣A-Za-z]+(?:\\s[가-힣A-Za-z]+)?)\\s?(?:씨|님)?(?:의)?\\s?(아들|딸|아버님|어머님|아버지|어머니|부친|모친|장인|장모|시아버지|시어머니|부모님|할머니|할아버지|남편|아내|손자|손녀)?\\s?(${EVENT})`).exec(t);
+  let ev = '';
+  if (m) {
+    let words = m[1].split(' '), fam = m[2] || '';
+    const cut = words.map(w => /(에서|에게|에|으로|하고|와|과)$/.test(w)).lastIndexOf(true);   // "더채플에서 김철수" → 김철수
+    words = words.slice(cut + 1).filter(w => !/^(그|우리|이번|다음|오늘|내일)$/.test(w));
+    if (!fam && words.length > 1 && FAMILY.test(words[words.length - 1])) fam = words.pop();   // "김과장 아들"
+    const who = words.slice(-2).join(' ').replace(/(씨|님|의)$/, '');
+    ev = m[3];
+    if (who) out.who = fam ? `${who} (${fam} ${ev.replace(/식$/, '')})` : who;
+  }
+  if (out.who || out.amount || (out.cat && GIFT_CAT.test(catName(out.cat)))) out.gift = {who: out.who || '', rel: out.rel || '', amount: out.amount || 0};
+  // 장소 이름: "○○에서" / "장소는 ○○" / 경조사면 "누구 결혼식"
+  if (m = /장소(?:는|가)?\s([^\s]+(?:\s[^\s]+){0,2})/.exec(t)) out.name = m[1];
+  else if (m = /([가-힣A-Za-z0-9]+(?:\s[가-힣A-Za-z0-9]+)?)\s?에서\s/.exec(t)) out.name = m[1];
+  else if (m = /([가-힣A-Za-z0-9]+(?:\s[가-힣A-Za-z0-9]+)?)\s?(?:에|으로|로)\s(?:가|간|갔|갈|방문|모임|만나|약속)/.exec(t)) out.name = m[1];
+  if (out.name) out.name = out.name.replace(/^(그리고|우리|그|저|나|이번에)\s/, '').trim();
+  if (!out.name && out.who && ev) out.name = `${out.who.replace(/\s\(.*\)$/, '')} ${ev}`;
+  if (!out.name) {   // 남은 말에서 앞쪽 이름씨만(“강릉 초당순두부 맛있었다” → 강릉 초당순두부)
+    const nouns = [];
+    for (const w of t.trim().split(' ')) {
+      if (!w || /(다|요|기|음|고|서|네|게|지|죠)$/.test(w) || /^(그리고|정말|너무|진짜|좀|또|같이|함께|약속)$/.test(w)) { if (nouns.length) break; continue; }
+      nouns.push(w); if (nouns.length === 3) break;
+    }
+    if (nouns.length) out.name = nouns.join(' ');
+  }
+  delete out.who; delete out.rel; delete out.amount;
+  out.memo = raw.trim();
+  return out;
+}
+
+let formFromVoice = false;   // 말로 채운 입력 화면은 '다시 방문'이 아니라 새 방문·새 일정
+function openVoice(){
+  Voice.stop();
+  $('#vText').value = ''; $('#vInt').textContent = ''; vPreview();
+  $('#voiceSheet').classList.add('on');
+  vListen();
+}
+function vListen(){
+  Voice.start('voice', {
+    final: t => { const ta = $('#vText'); ta.value = ta.value ? ta.value.replace(/\s*$/, '') + ' ' + t : t; vPreview(); },
+    interim: t => { $('#vInt').textContent = t; },
+    state: on => { $('#vMic').classList.toggle('rec', on); $('#vState').textContent = on ? '듣고 있어요… 다 말했으면 🎤를 눌러 멈추세요' : '눌러서 말하기'; }
+  });
+}
+function vPreview(){
+  const text = $('#vText').value.trim();
+  if (!text) { $('#vPrev').innerHTML = '<span class="none">말하면 여기에 찾은 내용이 보입니다.</span>'; return; }
+  const p = parseVisitSpeech(text);
+  const wd = d => '일월화수목금토'[new Date(d + 'T12:00').getDay()];
+  const row = (k, v) => `<div><b>${k}</b>${v ? esc(v) : '<span class="none">—</span>'}</div>`;
+  $('#vPrev').innerHTML = row('날짜', p.date ? `${p.date} (${wd(p.date)})${p.date > today() ? ' · 📅 일정' : ''}` : '오늘 (말 안 함)')
+    + row('시간', p.time) + row('분류', p.cat) + row('장소', p.name)
+    + (p.gift ? row('경조사', giftStr(p.gift) || '(누구·금액 못 찾음)') : '');
+}
+$('#vText').addEventListener('input', vPreview);
+$('#fabMic').addEventListener('click', openVoice);
+$('#vMic').addEventListener('click', () => Voice.on ? Voice.stop() : vListen());
+$('#vClear').addEventListener('click', () => { $('#vText').value = ''; vPreview(); });
+$('#vClose').addEventListener('click', () => { Voice.stop(); $('#voiceSheet').classList.remove('on'); });
+for (const b of ['#vGo', '#vGo2']) $(b).addEventListener('click', async () => {
+  Voice.stop();
+  await new Promise(r => setTimeout(r, 300));   // 멈출 때 마지막 말이 늦게 들어오는 것을 기다림
+  const text = $('#vText').value.trim();
+  if (!text) { toast('말한 내용이 없습니다'); return; }
+  const p = parseVisitSpeech(text), preset = {};
+  for (const k of ['date', 'time', 'cat', 'name', 'memo', 'gift']) if (p[k]) preset[k] = p[k];
+  $('#voiceSheet').classList.remove('on');
+  formFromVoice = true;
+  try { openForm(null, preset); } finally { formFromVoice = false; }
+  toast(preset.date > today() ? '일정으로 채웠습니다 — 확인하고 저장하세요' : '채웠습니다 — 확인하고 저장하세요');
+});
+// 입력 화면 칸마다 🎤 (장소 이름·메모)
+$('#formSheet').addEventListener('click', e => {
+  const b = e.target.closest('[data-mic]'); if (!b) return;
+  e.preventDefault();
+  const id = b.dataset.mic, el = $('#' + id), name = id === 'fName' ? '장소 이름' : '메모';
+  if (Voice.on && Voice.key === id) { Voice.stop(); return; }
+  Voice.start(id, {
+    final: t => { el.value = el.value ? el.value.replace(/\s+$/, '') + (el.tagName === 'INPUT' ? ' ' : '\n') + t : t; el.dispatchEvent(new Event('input')); },
+    interim: t => { $('#liveBar').textContent = t ? `🎤 ${t}` : `🎤 ${name}에 받아 적는 중… (🎤 다시 누르면 멈춤)`; },
+    state: on => {
+      document.querySelectorAll('#formSheet [data-mic]').forEach(m => m.classList.toggle('rec', on && m.dataset.mic === id));
+      $('#liveBar').classList.toggle('on', on);
+      if (on) $('#liveBar').textContent = `🎤 ${name}에 받아 적는 중… (🎤 다시 누르면 멈춤)`;
+    }
+  });
+});
+for (const id of ['#fCancel', '#fSave']) $(id).addEventListener('click', () => Voice.stop(), true);
+// 일정 칩 위 단추
+$('#list').addEventListener('click', e => {
+  if (e.target.closest('#planAdd')) { const d = new Date(today() + 'T12:00'); d.setDate(d.getDate() + 1); openForm(null, {date: ymdOf(d)}); }
+  else if (e.target.closest('#planVoice')) openVoice();
+});
+
 /* ---------- 탭 ---------- */
 document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
 function showTab(t){
   if (selMode && t !== 'list') setSelMode(false);
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   document.querySelectorAll('.tab').forEach(s => s.classList.toggle('on', s.id === 'tab-' + t));
-  $('#fab').style.display = (t === 'list' || t === 'map' || t === 'cal') ? '' : 'none';
+  $('#fab').style.display = $('#fabMic').style.display = (t === 'list' || t === 'map' || t === 'cal') ? '' : 'none';
   if (t === 'map') renderBigMap();
   if (t === 'cal') renderCal();
   if (t === 'stat') renderStats();
@@ -1264,8 +1551,8 @@ function shrink(file, max = 1280, q = 0.8){
 function openForm(v, preset){
   editing = v ? JSON.parse(JSON.stringify(v)) :
     Object.assign({id:uid(), name:'', date:today(), cat:cats[0], rating:0, addr:'', with:'', memo:'', photos:[], lat:null, lng:null, again:false, created:Date.now()}, preset || {});
-  const again = !!preset?.name && !preset.fromPlan;    // 상세의 [다시 방문] — 달력의 [이날 방문 기록하기]는 날짜만, 약속의 [방문으로 기록]은 약속 내용을 채움
-  $('#fTitle').textContent = v ? '기록 수정' : (again ? '다시 방문' : '새 방문');
+  const again = !!preset?.name && !preset.fromPlan && !formFromVoice;    // 상세의 [다시 방문] — 달력의 [이날 방문 기록하기]는 날짜만, 약속의 [방문으로 기록]은 약속 내용을 채움
+  $('#fTitle').textContent = v ? '기록 수정' : (again ? '다시 방문' : editing.date > today() ? '새 일정' : '새 방문');
   $('#fName').value = editing.name; $('#fDate').value = editing.date; $('#fTime').value = editing.time || '';
   showEnd(editing.dateEnd > editing.date ? editing.dateEnd : '');
   fillCatSelect(editing.cat);
@@ -1919,7 +2206,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.12.0';
+const APP_VERSION = 'v1.13.0';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
