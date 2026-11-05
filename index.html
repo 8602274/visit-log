@@ -85,7 +85,7 @@ textarea{min-height:90px;resize:vertical}
 .selBar .btn:disabled{opacity:.4}
 
 /* 지도 */
-#bigMap{height:calc(100vh - 170px);border-radius:14px;overflow:hidden}
+#bigMap{height:calc(100vh - 170px);border-radius:14px;overflow:hidden;position:relative;z-index:0}   /* 지도 층(400 이상)이 둥근 단추 위로 올라오지 않게 */
 .leaflet-popup-content{font-family:inherit}
 
 /* 달력 */
@@ -177,6 +177,7 @@ nav button.on{color:var(--accent);font-weight:700}
 .mNote{font-size:13px;color:var(--danger);line-height:1.5}
 /* 말로 기록 */
 #fabMic{bottom:calc(152px + env(safe-area-inset-bottom));width:50px;height:50px;font-size:24px;right:22px;background:#7c3aed}
+#fabMail{bottom:calc(212px + env(safe-area-inset-bottom));width:50px;height:50px;font-size:24px;right:22px;background:#2563eb}
 .mic{border:1px solid var(--line);background:var(--card);border-radius:999px;font-size:13px;padding:2px 10px;cursor:pointer;color:var(--text);margin-left:6px;font-family:inherit;vertical-align:1px}
 .mic.rec{background:#dc2626;border-color:#dc2626;color:#fff;animation:vpulse 1.2s infinite}
 @keyframes vpulse{50%{opacity:.6}}
@@ -202,7 +203,7 @@ nav button.on{color:var(--accent);font-weight:700}
 #fMore{display:none}#formSheet.plan #fMore{display:block}
 #formSheet.plan #fMemo{min-height:140px}
 /* 일정 목록: 한 줄에 제목·날짜·시간만 작게 */
-.plist{background:var(--card);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;margin-bottom:150px}   /* 아래 둥근 단추에 안 가리게 */
+.plist{background:var(--card);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;margin-bottom:210px}   /* 아래 둥근 단추에 안 가리게 */
 .item.prow{display:flex;align-items:center;gap:8px;margin:0;padding:8px 12px;border-radius:0;box-shadow:none;background:none;
   border-top:1px solid var(--line);font-size:13px;line-height:1.35;min-height:0}
 .item.prow:first-child{border-top:0}
@@ -372,6 +373,7 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
 
 <button class="fab" id="fab" aria-label="새 방문 기록">＋</button>
 <button class="fab" id="fabMic" aria-label="말로 기록">🎤</button>
+<button class="fab" id="fabMail" aria-label="메일로 일정">📧</button>
 
 <!-- 일정 저장 뒤: 폰 달력에 넣기 (알림 2시간 전) -->
 <div id="calAsk"><div class="in">
@@ -880,7 +882,7 @@ function twice(b, ask){
 function setSelMode(on){
   selMode = on; selIds.clear();
   $('#btnSel').textContent = on ? '완료' : '선택';
-  $('#fab').style.display = $('#fabMic').style.display = on ? 'none' : '';
+  $('#fab').style.display = $('#fabMic').style.display = $('#fabMail').style.display = on ? 'none' : '';
   renderList();
 }
 function renderSelBar(arr){
@@ -1555,6 +1557,7 @@ function vPreview(){
 }
 $('#vText').addEventListener('input', vPreview);
 $('#fabMic').addEventListener('click', openVoice);
+$('#fabMail').addEventListener('click', openMail);
 $('#vMic').addEventListener('click', () => Voice.on ? Voice.stop() : vListen());
 $('#vClear').addEventListener('click', () => { $('#vText').value = ''; vPreview(); });
 $('#vClose').addEventListener('click', () => { Voice.stop(); $('#voiceSheet').classList.remove('on'); });
@@ -2725,7 +2728,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.14.0';
+const APP_VERSION = 'v1.14.1';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
