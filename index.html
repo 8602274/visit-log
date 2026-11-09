@@ -180,7 +180,8 @@ nav button.on{color:var(--accent);font-weight:700}
 .mLoc input[type=radio]{margin:3px 0 0;flex:none;width:18px;height:18px;padding:0;accent-color:#2563eb}
 .mLoc label>span{flex:1;min-width:0}
 .mLoc .sub{color:var(--sub)}
-.mLocRow{display:flex;gap:6px}.mLocRow .mAddr{flex:1;min-width:0}.mLocRow .btn{flex:none;padding:8px 10px;font-size:13px}
+.mLocRow{display:flex;gap:6px}.mLocRow .btn{flex:1;min-width:0;padding:8px 4px;font-size:13px;white-space:nowrap}
+.mLocRow .mKakao{background:#fee500;color:#191919;border-color:#fee500}.mLocRow .mNaver{background:#03c75a;color:#fff;border-color:#03c75a}
 /* 말로 기록 */
 #fabMic{bottom:calc(152px + env(safe-area-inset-bottom));width:50px;height:50px;font-size:24px;right:22px;background:#7c3aed}
 #fabMail{bottom:calc(212px + env(safe-area-inset-bottom));width:50px;height:50px;font-size:24px;right:22px;background:#2563eb}
@@ -410,6 +411,9 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
       <button class="btn" id="mClear">지우기</button>
       <button class="btn primary" id="mParse">정리하기</button>
     </div>
+    <!-- 메시지 장소 : 적거나(정리하면 첫 장소가 들어감) 바로 카카오맵 · 네이버지도로 (v1.15.1) -->
+    <input id="mPlace" placeholder="📍 메시지 장소 — 이름이나 주소" style="margin-top:8px">
+    <div class="mLocRow" style="margin-top:6px"><button class="btn mKakao" id="mPlaceKakao" type="button">카카오맵에서 보기</button><button class="btn mNaver" id="mPlaceNaver" type="button">네이버지도에서 보기</button></div>
     <div id="mInfo"></div>
     <div id="mList"></div>
     <div id="mSaveRow" style="display:none;margin-bottom:24px"><button class="btn primary block" id="mSave">일정에 넣기</button></div>
@@ -2525,7 +2529,8 @@ function mailRender(){
       <div class="mHead"><input type="checkbox" class="mChk" aria-label="이 일정 넣기" ${past || dup ? '' : 'checked'}><input class="mTitle" value="${esc(e.title)}" placeholder="일정 제목"></div>
       <div class="row mWhen"><input class="mDate" type="date" value="${esc(e.date)}"><input class="mTime" type="time" value="${esc(e.time)}"></div>
       ${e.dateEnd ? `<div class="hint">끝나는 날 ${esc(e.dateEnd)}</div>` : ''}
-      <div class="mLocRow"><input class="mAddr" value="${esc(e.addr)}" placeholder="장소 (없으면 비워 두세요)"><button class="btn mFind" type="button">🔍 위치</button></div>
+      <input class="mAddr" value="${esc(e.addr)}" placeholder="📍 장소 — 이름이나 주소를 적고 아래 단추">
+      <div class="mLocRow"><button class="btn mFind" type="button">🔍 위치 찾기</button><button class="btn mKakao" type="button">카카오맵</button><button class="btn mNaver" type="button">네이버지도</button></div>
       <div class="mLoc" style="display:none"></div>
       <textarea class="mMemo" placeholder="메모">${esc(e.memo)}</textarea>
       ${notes.length ? `<div class="mNote">${esc(notes.join(' · '))}</div>` : ''}
@@ -2539,16 +2544,33 @@ function mailCount(){ $('#mSave').textContent = `선택한 ${document.querySelec
 function mailShow(list, how){
   mailEvents = list;
   mailRender();
+  const firstPlace = list.find(e => e.addr)?.addr;
+  if (firstPlace) $('#mPlace').value = firstPlace;          // 메시지 장소 칸 = 찾은 첫 장소
   const what = mailKind ? `${mailKind} ` : '';
   mailSay(list.length ? `${how}: ${what}일정 ${list.length}개를 찾았습니다. 틀린 곳을 고치고, 위치를 확인한 뒤 넣을 것만 체크하세요.` : `${how}: 날짜가 있는 일정을 찾지 못했습니다. 날짜를 “11월 15일 오후 3시”처럼 적어 보세요.`);
   list.forEach((_, i) => locate(i));               // 위치 자동 확인
 }
 $('#mList').addEventListener('click', e => {
-  const b = e.target.closest('.mFind'); if (!b) return;
-  const card = b.closest('.mCard'), i = +card.dataset.i;
-  mailEvents[i].addr = card.querySelector('.mAddr').value;
-  locate(i);
+  const b = e.target.closest('.mFind, .mKakao, .mNaver'); if (!b) return;
+  const card = b.closest('.mCard'), i = +card.dataset.i, ev = mailEvents[i];
+  const q = locQuery(card.querySelector('.mAddr').value);
+  if (b.classList.contains('mFind')) { ev.addr = card.querySelector('.mAddr').value; locate(i); return; }
+  // 카카오맵 · 네이버지도 바로 열기 — 위치를 골라 두었으면 그 자리, 아니면 장소 칸 글로 검색
+  const loc = ev?.locState === 'done' && ev.locPick >= 0 ? ev.locs[ev.locPick] : null;
+  if (!q && !loc) { toast('장소 칸에 이름이나 주소를 적어 주세요'); card.querySelector('.mAddr').focus(); return; }
+  const url = b.classList.contains('mKakao')
+    ? (loc ? `https://map.kakao.com/link/map/${encodeURIComponent(loc.name)},${loc.lat},${loc.lng}` : `https://map.kakao.com/?q=${encodeURIComponent(q)}`)
+    : (loc ? `https://map.naver.com/p/search/${encodeURIComponent(loc.road || loc.addr || loc.name)}?c=${loc.lng},${loc.lat},16,0,0,0,dh` : `https://map.naver.com/p/search/${encodeURIComponent(q)}`);
+  window.open(url, '_blank', 'noopener');
 });
+function openMapSearch(kind){
+  const q = locQuery($('#mPlace').value);
+  if (!q) { toast('장소를 적어 주세요'); $('#mPlace').focus(); return; }
+  window.open(kind === 'kakao' ? `https://map.kakao.com/?q=${encodeURIComponent(q)}` : `https://map.naver.com/p/search/${encodeURIComponent(q)}`, '_blank', 'noopener');
+}
+$('#mPlaceKakao').addEventListener('click', () => openMapSearch('kakao'));
+$('#mPlaceNaver').addEventListener('click', () => openMapSearch('naver'));
+$('#mPlace').addEventListener('keydown', e => { if (e.key === 'Enter') openMapSearch('kakao'); });
 $('#mList').addEventListener('change', e => {
   if (e.target.type !== 'radio') return;
   const i = +e.target.closest('.mCard').dataset.i;
@@ -2559,7 +2581,7 @@ $('#mText').addEventListener('paste', () => setTimeout(() => {      // 붙여 �
   if (t) mailShow(parseMsgEvents(t), '정리');
 }, 0));
 $('#mClose').addEventListener('click', closeMail);
-$('#mClear').addEventListener('click', () => { $('#mText').value = ''; mailEvents = []; mailRender(); mailSay(''); $('#mText').focus(); });
+$('#mClear').addEventListener('click', () => { $('#mText').value = ''; $('#mPlace').value = ''; mailEvents = []; mailRender(); mailSay(''); $('#mText').focus(); });
 $('#mPaste').addEventListener('click', async () => {
   try {
     const t = await navigator.clipboard.readText();
@@ -2599,7 +2621,7 @@ $('#mSave').addEventListener('click', async () => {
       saved.push(v.id);
     }
   } catch { toast('저장 실패: 저장 공간이 부족할 수 있습니다'); await reload(); return; }
-  $('#mText').value = ''; mailEvents = []; mailRender(); mailSay('');
+  $('#mText').value = ''; $('#mPlace').value = ''; mailEvents = []; mailRender(); mailSay('');
   closeMail();
   filterCat = '__plan'; selIds.clear(); $('#q').value = '';
   await reload(); showTab('list'); syncSoon();
@@ -2819,7 +2841,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.15.0';
+const APP_VERSION = 'v1.15.1';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
