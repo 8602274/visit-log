@@ -175,6 +175,12 @@ nav button.on{color:var(--accent);font-weight:700}
 .mWhen>input{min-width:0}
 .mMemo{min-height:64px;font-size:14px;line-height:1.5}
 .mNote{font-size:13px;color:var(--danger);line-height:1.5}
+.mLoc{font-size:13px;line-height:1.5;background:#eff6ff;border-radius:8px;padding:6px 8px}
+.mLoc label{display:flex;gap:6px;align-items:flex-start;margin:3px 0;cursor:pointer}
+.mLoc input[type=radio]{margin:3px 0 0;flex:none;width:18px;height:18px;padding:0;accent-color:#2563eb}
+.mLoc label>span{flex:1;min-width:0}
+.mLoc .sub{color:var(--sub)}
+.mLocRow{display:flex;gap:6px}.mLocRow .mAddr{flex:1;min-width:0}.mLocRow .btn{flex:none;padding:8px 10px;font-size:13px}
 /* 말로 기록 */
 #fabMic{bottom:calc(152px + env(safe-area-inset-bottom));width:50px;height:50px;font-size:24px;right:22px;background:#7c3aed}
 #fabMail{bottom:calc(212px + env(safe-area-inset-bottom));width:50px;height:50px;font-size:24px;right:22px;background:#2563eb}
@@ -394,11 +400,11 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
 <div class="sheet" id="mailSheet">
   <div class="top">
     <button id="mClose">닫기</button>
-    <h2>📧 메일로 일정</h2>
+    <h2>📧 메일·메시지로 일정</h2>
     <span style="width:40px"></span>
   </div>
   <div class="body">
-    <textarea id="mText" placeholder="메일 내용을 복사해서 여기에 붙여 넣으세요."></textarea>
+    <textarea id="mText" placeholder="메일 · 카톡 · 문자 내용을 복사해서 여기에 붙여 넣으세요. 붙여 넣으면 바로 정리하고 위치도 찾습니다."></textarea>
     <div class="row mBtns" style="margin-top:8px">
       <button class="btn" id="mPaste">📋 붙여넣기</button>
       <button class="btn" id="mClear">지우기</button>
@@ -408,7 +414,9 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
     <div id="mList"></div>
     <div id="mSaveRow" style="display:none;margin-bottom:24px"><button class="btn primary block" id="mSave">일정에 넣기</button></div>
     <div class="vGuide">
-      메일 글은 AI나 다른 서버로 보내지 않고 이 기기 안에서만 정리합니다. 날짜·시간·장소를 글자 규칙으로 찾으므로 틀릴 수 있으니 저장 전에 확인하세요.
+      메일·메시지 글은 AI나 다른 서버로 보내지 않고 이 기기 안에서만 정리합니다. 날짜·시간·장소를 글자 규칙으로 찾으므로 틀릴 수 있으니 저장 전에 확인하세요.
+      위치는 찾아낸 <b>장소 이름만</b> 카카오 지도 검색으로 찾습니다(글 전체는 보내지 않음). 맞는 곳을 고르거나 [위치 안 넣음]을 누르세요.
+      카톡 대화를 복사하면 대화 시각([오후 3:12])은 일정 시간으로 치지 않고, 날짜 줄(2026년 11월 9일 …)을 “오늘” 기준으로 씁니다.
       메일을 보낸 날짜는 일정으로 치지 않고, “다음 주 화요일” 같은 말은 보낸 날짜를 기준으로 계산합니다.
       시간에 오전·오후가 없으면 1~7시는 오후로 봅니다.
     </div>
@@ -803,12 +811,14 @@ function filtered(){
 function renderList(){
   const arr = filtered();
   $('#list').classList.toggle('sel', selMode); renderSelBar(arr);
+  const allTop = `<div class="planTop"><button class="btn primary" id="allMsg">💬 메시지 넣어 일정·위치 정리</button></div>`;
   if (!allVisits.length && filterCat !== '__plan') {
-    $('#list').innerHTML = `<div class="empty">아직 기록이 없어요.<br>오른쪽 아래 <b>＋</b> 버튼으로 첫 방문을 남겨 보세요.</div>`;
+    $('#list').innerHTML = (filterCat === '' ? allTop : '') + `<div class="empty">아직 기록이 없어요.<br>오른쪽 아래 <b>＋</b> 버튼으로 첫 방문을 남겨 보세요.</div>`;
     return;
   }
   const planTop = filterCat === '__plan'
-    ? `<div class="planTop"><button class="btn" id="planAdd">＋ 일정 추가</button><button class="btn primary" id="planVoice">🎤 말로 일정</button><button class="btn primary" id="planMail">📧 메일로 일정</button></div>` : '';
+    ? `<div class="planTop"><button class="btn" id="planAdd">＋ 일정 추가</button><button class="btn primary" id="planVoice">🎤 말로 일정</button><button class="btn primary" id="planMail">📧 메일로 일정</button></div>`
+    : filterCat === '' && !$('#q').value.trim() ? allTop : '';   // [전체] : 메시지를 넣으면 일정·위치 정리 (v1.15.0)
   if (!arr.length) { $('#list').innerHTML = planTop + `<div class="empty">${filterCat === '__hidden' ? '숨긴 기록이 없습니다.' : filterCat === '__plan' ? '앞으로의 일정이 없습니다.<br>🎤로 “다음 주 토요일 3시 김철수 결혼식”처럼 말해 보세요.' : '조건에 맞는 기록이 없습니다.'}</div>`; return; }
   if (filterCat === '__plan') { $('#list').innerHTML = planTop + `<div class="plist">${arr.map(planRowHtml).join('')}</div>`; return; }
   const groupByMonth = ['date','old'].includes($('#sort').value);
@@ -823,7 +833,7 @@ function renderList(){
     }
     html += itemHtml(v);
   }
-  $('#list').innerHTML = html;
+  $('#list').innerHTML = planTop + html;
 }
 // 일정 목록 한 줄: 제목 · 날짜 · 시간만 작게 (아이콘·사진 없이 많이 보이게)
 function planRowHtml(v){
@@ -1599,6 +1609,7 @@ $('#list').addEventListener('click', e => {
   }
   else if (e.target.closest('#planVoice')) openVoice();
   else if (e.target.closest('#planMail')) openMail();
+  else if (e.target.closest('#allMsg')) openMail(true);
 });
 
 /* ---------- 탭 ---------- */
@@ -2337,7 +2348,7 @@ function mailBlock(lines, base, head){
     let left = (tm ? tm.rest : rest).replace(/(^|\s)(까지|부터)(?=\s|$)/g, ' ');
     const pm = /([가-힣A-Za-z0-9]+(?:\s[가-힣A-Za-z0-9]+){0,2})\s?에서(?=\s|$)/.exec(left);
     let inPlace = '';
-    if (pm) { inPlace = pm[1]; left = left.replace(pm[0], ' '); }
+    if (pm) { inPlace = pm[1].replace(/^(?:에|에서|은|는|이|가|을|를|도)\s+/, ''); left = left.replace(pm[0], ' '); }   // "7시에 강남역에서" → 강남역
     let text = mailCleanLine(left);
     if (lm && !isDate && body === val) text = mailCleanLine(lm[1] + ' ' + text);
     const due = /까지|마감|기한/.test(body) || /마감|기한/.test(label) || (isDate && MAIL_DUE_LB.test(label));
@@ -2365,7 +2376,8 @@ function mailBlock(lines, base, head){
     else if (merged.length === 1) title = nearest(names, e.i)?.val || subj || line || firstLine;
     else title = line ? (line.length < 6 && topic ? `${topic} ${line}` : line) : (topic || firstLine);
     const memo = [head.from ? `보낸 사람: ${head.from}` : '', head.subject ? `제목: ${head.subject}` : '', ...e.lines, pl ? `장소: ${pl.val}` : ''].filter(Boolean).join('\n');
-    return {title: (title || '메일 일정').slice(0, 60), date: e.date, time: e.time, dateEnd: e.dateEnd, addr: pl?.val || e.inPlace || '', memo, wdBad: e.wdBad};
+    // 같은 줄의 "…에서" 장소가 있으면 그것이 먼저 (v1.15.0 — 대화 여러 줄에서 다른 줄 장소를 가져오던 것)
+    return {title: (title || '메일 일정').slice(0, 60), date: e.date, time: e.time, dateEnd: e.dateEnd, addr: e.inPlace || pl?.val || '', memo, wdBad: e.wdBad};
   });
 }
 function parseMailEvents(raw, now){
@@ -2398,6 +2410,92 @@ function parseMailEvents(raw, now){
   return out;
 }
 
+/* 카톡 · 문자 메시지 (v1.15.0) : 대화 머리(이름 · 보낸 시각)를 떼고, 대화 날짜 줄을 '보낸 날짜'로 씀
+   · PC 복사 "[홍길동] [오후 3:12] 내일 7시 강남역에서 봐요"
+   · 내보내기 "2026. 11. 9. 오후 3:12, 홍길동 : …" / "2026년 11월 9일 오후 3:12, 홍길동 : …"
+   · 날짜 줄 "--------------- 2026년 11월 9일 일요일 ---------------" · "2026년 11월 9일 일요일"
+   · 문자 "[Web발신]" */
+function msgNormalize(raw){
+  const lines = String(raw || '').replace(/\r/g, '').split('\n');
+  let base = '', kind = '', who = new Set();
+  const out = [];
+  for (let l of lines) {
+    let m;
+    if ((m = /^[\s\-=]*(20\d{2})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일\s*[일월화수목금토]요일[\s\-=]*$/.exec(l))) {
+      base = mailYmd(+m[1], +m[2], +m[3]) || base; kind = '카톡'; continue;
+    }
+    if ((m = /^\s*(20\d{2})\s*[.년]\s*(\d{1,2})\s*[.월]\s*(\d{1,2})\s*[.일]?\s*,?\s*(?:오전|오후)\s*\d{1,2}:\d{2}\s*,\s*([^:]{1,30}?)\s*:\s?(.*)$/.exec(l))) {
+      base = mailYmd(+m[1], +m[2], +m[3]) || base; kind = '카톡'; who.add(m[4].trim()); out.push(m[5]); continue;
+    }
+    if ((m = /^\s*\[([^\]]{1,30})\]\s*\[(?:오전|오후)\s*\d{1,2}:\d{2}\]\s?(.*)$/.exec(l))) {
+      kind = '카톡'; who.add(m[1].trim()); out.push(m[2]); continue;
+    }
+    if (/^\s*\[(?:Web발신|국외발신|광고)\]\s*$/i.test(l)) { kind = kind || '문자'; continue; }
+    l = l.replace(/^\s*\[(?:Web발신|국외발신)\]\s*/i, () => { kind = kind || '문자'; return ''; });
+    if (/^\s*(?:저장한 날짜|Talk_\d|카카오톡 대화)/.test(l)) continue;      // 내보내기 머리
+    out.push(l);
+  }
+  const head = base ? [`보낸날짜: ${base.replace(/-/g, '.')}`] : [];
+  return {text: head.concat(out).join('\n'), kind, who: [...who]};
+}
+const MSG_FILLER = /^(봐요?|보자|봬요|뵈요|뵙겠습니다|만나요?|만나자|만납시다|ㄱㄱ|콜|오케이|ok|네|넹|예|좋아요?|알겠어요?|그래요?)[.!~ ]*$/i;
+function parseMsgEvents(raw, now){
+  const n = msgNormalize(raw);
+  const list = parseMailEvents(n.text, now);
+  for (const e of list) {
+    if (!n.kind) continue;
+    e.title = e.title.replace(/^\s*\[[^\]]{1,12}\]\s*/, '') || e.title;      // 문자 "[모임안내] 송년회" → 송년회
+    if (e.title.length < 2 || MSG_FILLER.test(e.title) || e.title === '메일 일정') e.title = e.addr ? `${e.addr} 약속` : '약속';
+    if (n.who.length) e.memo = `대화: ${n.who.join(', ')}\n` + e.memo;
+  }
+  mailKind = n.kind;
+  return list;
+}
+let mailKind = '';
+
+/* 위치 확인 : 찾아낸 장소 이름(또는 주소)만 카카오 지도 검색 → 맞는 곳 3곳까지 후보, 첫 번째를 골라 둠 */
+const locFromPlace = d => ({id: d.id, name: d.place_name, addr: d.address_name, road: d.road_address_name, phone: d.phone,
+  cat: (d.category_name || '').split(' > ').slice(-2).join(' > '), lat: +(+d.y).toFixed(6), lng: +(+d.x).toFixed(6), url: d.place_url});
+const locFromAddr = d => ({name: d.address_name, addr: d.address_name, road: d.road_address?.address_name || '',
+  lat: +(+d.y).toFixed(6), lng: +(+d.x).toFixed(6), isAddr: true});
+async function locSearch(q){
+  await kakaoReady();
+  const S = kakao.maps.services;
+  const kw = () => new Promise(res => new S.Places().keywordSearch(q, (d, st) => res(st === S.Status.OK ? d.slice(0, 3).map(locFromPlace) : []), {size: 5}));
+  const ad = () => new Promise(res => new S.Geocoder().addressSearch(q, (d, st) => res(st === S.Status.OK ? d.slice(0, 3).map(locFromAddr) : [])));
+  const addrLike = /(시|군|구|읍|면|동|리|로|길)\s*\d/.test(q);
+  let r = addrLike ? await ad() : await kw();
+  if (!r.length) r = addrLike ? await kw() : await ad();
+  return r;
+}
+const locQuery = s => String(s || '').replace(/\s*(에서|으로|로|앞|근처|쪽)$/, '').replace(/\s+/g, ' ').trim();
+async function locate(i){
+  const e = mailEvents[i]; if (!e) return;
+  const q = locQuery(e.addr);
+  if (!q) { e.locState = 'noq'; e.locs = []; locRender(i); return; }
+  e.locState = 'wait'; locRender(i);
+  try {
+    const r = await locSearch(q);
+    if (mailEvents[i] !== e) return;                 // 그사이 다시 정리함
+    e.locs = r; e.locPick = r.length ? 0 : -1; e.locState = r.length ? 'done' : 'none'; e.locQ = q;
+  } catch { e.locs = []; e.locPick = -1; e.locState = 'fail'; }
+  locRender(i);
+}
+function locRender(i){
+  const box = document.querySelector(`#mList .mCard[data-i="${i}"] .mLoc`), e = mailEvents[i];
+  if (!box || !e) return;
+  const st = e.locState;
+  box.innerHTML = st === 'wait' ? '📍 위치 찾는 중…'
+    : st === 'noq' ? '📍 장소를 못 찾았습니다 — 장소 칸에 적고 [🔍 위치]를 누르세요.'
+    : st === 'none' ? `📍 “${esc(e.locQ)}” 위치를 못 찾았습니다 — 장소 칸을 고쳐(지역을 같이) [🔍 위치]를 누르세요.`
+    : st === 'fail' ? '📍 카카오 지도에 연결하지 못했습니다(인터넷 확인). 위치 없이 저장됩니다.'
+    : st === 'done' ? `<b>📍 위치 확인</b> — 맞는 곳을 고르세요` + e.locs.map((l, k) => `<label><input type="radio" name="loc${i}" value="${k}" ${e.locPick === k ? 'checked' : ''}>
+        <span>${esc(l.name)}${l.cat ? ` <span class="sub">· ${esc(l.cat.split(' > ').pop())}</span>` : ''}<br><span class="sub">${esc(l.road || l.addr)}</span></span></label>`).join('')
+        + `<label><input type="radio" name="loc${i}" value="-1" ${e.locPick === -1 ? 'checked' : ''}><span class="sub">위치 안 넣음</span></label>`
+    : '';
+  box.style.display = box.innerHTML ? '' : 'none';
+}
+
 let mailEvents = [];
 const mailSay = t => { $('#mInfo').textContent = t; };
 function mailCat(title){
@@ -2405,8 +2503,15 @@ function mailCat(title){
   for (const [re, keys] of CAT_WORDS) if (re.test(title)) { const c = cats.find(c => keys.some(k => catName(c).includes(k))); if (c) return c; }
   return etc;
 }
-function openMail(){
+// auto = [전체]의 💬 단추 : 복사해 둔 글이 있으면 바로 붙여 정리(권한을 막았으면 칸에 붙여넣기)
+async function openMail(auto){
   $('#mailSheet').classList.add('on');
+  if (auto === true) {
+    try {
+      const t = await navigator.clipboard.readText();
+      if (t && t.trim() && !$('#mText').value.trim()) { $('#mText').value = t; mailShow(parseMsgEvents(t), '복사해 둔 글 정리'); return; }
+    } catch {}
+  }
   setTimeout(() => $('#mText').focus(), 100);
 }
 function closeMail(){ $('#mailSheet').classList.remove('on'); }
@@ -2420,33 +2525,52 @@ function mailRender(){
       <div class="mHead"><input type="checkbox" class="mChk" aria-label="이 일정 넣기" ${past || dup ? '' : 'checked'}><input class="mTitle" value="${esc(e.title)}" placeholder="일정 제목"></div>
       <div class="row mWhen"><input class="mDate" type="date" value="${esc(e.date)}"><input class="mTime" type="time" value="${esc(e.time)}"></div>
       ${e.dateEnd ? `<div class="hint">끝나는 날 ${esc(e.dateEnd)}</div>` : ''}
-      <input class="mAddr" value="${esc(e.addr)}" placeholder="장소 (없으면 비워 두세요)">
+      <div class="mLocRow"><input class="mAddr" value="${esc(e.addr)}" placeholder="장소 (없으면 비워 두세요)"><button class="btn mFind" type="button">🔍 위치</button></div>
+      <div class="mLoc" style="display:none"></div>
       <textarea class="mMemo" placeholder="메모">${esc(e.memo)}</textarea>
       ${notes.length ? `<div class="mNote">${esc(notes.join(' · '))}</div>` : ''}
     </div>`;
   }).join('');
   $('#mSaveRow').style.display = mailEvents.length ? '' : 'none';
+  mailEvents.forEach((_, i) => locRender(i));
   mailCount();
 }
 function mailCount(){ $('#mSave').textContent = `선택한 ${document.querySelectorAll('#mList .mChk:checked').length}개 일정에 넣기`; }
 function mailShow(list, how){
   mailEvents = list;
   mailRender();
-  mailSay(list.length ? `${how}: 일정 ${list.length}개를 찾았습니다. 틀린 곳을 고치고, 넣을 것만 체크하세요.` : `${how}: 날짜가 있는 일정을 찾지 못했습니다. 날짜를 “11월 15일 오후 3시”처럼 적어 보세요.`);
+  const what = mailKind ? `${mailKind} ` : '';
+  mailSay(list.length ? `${how}: ${what}일정 ${list.length}개를 찾았습니다. 틀린 곳을 고치고, 위치를 확인한 뒤 넣을 것만 체크하세요.` : `${how}: 날짜가 있는 일정을 찾지 못했습니다. 날짜를 “11월 15일 오후 3시”처럼 적어 보세요.`);
+  list.forEach((_, i) => locate(i));               // 위치 자동 확인
 }
+$('#mList').addEventListener('click', e => {
+  const b = e.target.closest('.mFind'); if (!b) return;
+  const card = b.closest('.mCard'), i = +card.dataset.i;
+  mailEvents[i].addr = card.querySelector('.mAddr').value;
+  locate(i);
+});
+$('#mList').addEventListener('change', e => {
+  if (e.target.type !== 'radio') return;
+  const i = +e.target.closest('.mCard').dataset.i;
+  if (mailEvents[i]) mailEvents[i].locPick = +e.target.value;
+});
+$('#mText').addEventListener('paste', () => setTimeout(() => {      // 붙여 넣으면 바로 정리
+  const t = $('#mText').value.trim();
+  if (t) mailShow(parseMsgEvents(t), '정리');
+}, 0));
 $('#mClose').addEventListener('click', closeMail);
 $('#mClear').addEventListener('click', () => { $('#mText').value = ''; mailEvents = []; mailRender(); mailSay(''); $('#mText').focus(); });
 $('#mPaste').addEventListener('click', async () => {
   try {
     const t = await navigator.clipboard.readText();
     if (!t.trim()) return toast('복사한 글이 없습니다');
-    $('#mText').value = t; mailShow(parseMailEvents(t), '정리');
+    $('#mText').value = t; mailShow(parseMsgEvents(t), '정리');
   } catch { toast('칸을 길게 눌러 직접 붙여넣어 주세요'); $('#mText').focus(); }
 });
 $('#mParse').addEventListener('click', () => {
   const t = $('#mText').value.trim();
-  if (!t) { toast('메일 글을 먼저 붙여 넣어 주세요'); $('#mText').focus(); return; }
-  mailShow(parseMailEvents(t), '정리');
+  if (!t) { toast('메일·메시지 글을 먼저 붙여 넣어 주세요'); $('#mText').focus(); return; }
+  mailShow(parseMsgEvents(t), '정리');
 });
 $('#mList').addEventListener('change', e => { if (e.target.classList.contains('mChk')) mailCount(); });
 $('#mSave').addEventListener('click', async () => {
@@ -2460,10 +2584,17 @@ $('#mSave').addEventListener('click', async () => {
   try {
     for (const c of cards) {
       const name = c.querySelector('.mTitle').value.trim(), date = c.querySelector('.mDate').value, time = c.querySelector('.mTime').value;
-      const end = mailEvents[+c.dataset.i]?.dateEnd;
-      const v = {id: uid(), name, date, cat: mailCat(name), rating: 0, addr: c.querySelector('.mAddr').value.trim(), with: '', memo: c.querySelector('.mMemo').value, photos: [], lat: null, lng: null, again: false, created: now, updated: now};
+      const ev = mailEvents[+c.dataset.i] || {}, end = ev.dateEnd;
+      const typed = c.querySelector('.mAddr').value.trim();
+      const v = {id: uid(), name, date, cat: mailCat(name), rating: 0, addr: typed, with: '', memo: c.querySelector('.mMemo').value, photos: [], lat: null, lng: null, again: false, created: now, updated: now};
       if (time) v.time = time;
       if (end > date) v.dateEnd = end;
+      const loc = ev.locState === 'done' && ev.locPick >= 0 ? ev.locs[ev.locPick] : null;   // 확인한 위치
+      if (loc) {
+        v.lat = loc.lat; v.lng = loc.lng; v.addr = loc.road || loc.addr || typed;
+        if (!loc.isAddr) v.place = {id: loc.id, name: loc.name, addr: loc.addr, road: loc.road, phone: loc.phone, cat: loc.cat, lat: loc.lat, lng: loc.lng, url: loc.url};
+        if (typed && !v.memo.includes(typed)) v.memo += (v.memo ? '\n' : '') + `장소: ${typed}`;
+      }
       await DB.put(v);
       saved.push(v.id);
     }
@@ -2688,7 +2819,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.14.2';
+const APP_VERSION = 'v1.15.0';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
