@@ -250,6 +250,15 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
 .gallery img{flex:none;width:100%;max-height:60vh;object-fit:cover;scroll-snap-align:start}
 .dName{font-size:22px;font-weight:800;margin:0 0 6px}
 .dMeta{color:var(--sub);font-size:14px;line-height:1.7}
+.todo{margin:14px 0;background:var(--card);border-radius:12px;padding:10px 14px}
+.todo h3{margin:0 0 6px;font-size:15px}
+.todo label{display:flex;gap:10px;align-items:center;padding:7px 0;font-size:15px;border-top:1px solid var(--line)}
+.todo label:first-of-type{border-top:0}
+.todo input{width:20px;height:20px;flex:none;accent-color:var(--accent)}
+.todo label.done span{text-decoration:line-through;color:var(--sub)}
+.tdo{display:inline-block;font-size:11px;font-weight:700;background:#16a34a;color:#fff;border-radius:6px;padding:0 6px;margin-left:6px;vertical-align:1px}
+.tdo.all{background:#9ca3af}
+.prow .tdo{flex:none;margin-left:0}
 .memo{white-space:pre-wrap;line-height:1.7;margin:14px 0;background:var(--card);border-radius:12px;padding:14px}
 .history{font-size:14px;line-height:1.9}
 .history a{color:var(--accent);cursor:pointer;text-decoration:none}
@@ -574,6 +583,11 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
 
     <label class="f">메모 <button class="mic" type="button" data-mic="fMemo">🎤</button></label>
     <textarea id="fMemo" placeholder="먹은 메뉴, 가격, 느낀 점, 다음에 할 것…"></textarea>
+    <div id="fTodoRow">
+    <label class="f">✅ 해야 할 일 <span class="hint">— 한 줄에 하나</span> <button class="mic" type="button" data-mic="fTodo">🎤</button></label>
+    <textarea id="fTodo" style="min-height:90px" placeholder="예: 축의금 봉투 준비&#10;정장 세탁소에서 찾기&#10;선물 사기"></textarea>
+    <div class="hint" style="margin-top:4px">다 한 일은 상세 화면에서 체크합니다. (앞에 ✓ 를 붙여도 다 한 일)</div>
+    </div>
     <button class="btn block" id="fMore" type="button" style="margin-top:10px">＋ 다른 항목도 넣기 (장소·분류·경조사·사진…)</button>
 
     <div class="full">
@@ -858,12 +872,30 @@ function renderList(){
   $('#list').innerHTML = planTop + html;
 }
 // 일정 목록 한 줄: 제목 · 날짜 · 시간만 작게 (아이콘·사진 없이 많이 보이게)
+// 해야 할 일 (v1.17.0): v.todo = [{t, done}] — 입력 칸에선 한 줄에 하나, 다 한 일은 앞에 ✓
+function todoText(list){ return (list || []).map(x => (x.done ? '✓ ' : '') + x.t).join('\n'); }
+function parseTodo(text){
+  return text.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+    const m = l.match(/^(?:✓|✔|☑|\[[xX]\])\s*(.*)$/);
+    if (m) return {t: m[1].trim() || l, done: true};
+    return {t: l.replace(/^(?:☐|\[\s?\]|[-•·*])\s*/, '').trim() || l, done: false};
+  });
+}
+function todoBadge(v){
+  if (!v.todo?.length) return '';
+  const n = v.todo.filter(x => x.done).length, all = n === v.todo.length;
+  return `<span class="tdo${all ? ' all' : ''}">✅ ${n}/${v.todo.length}</span>`;
+}
+// 일정 화면이거나 앞날짜·이미 할 일이 있으면 보임
+function showTodoRow(){
+  $('#fTodoRow').style.display = ($('#formSheet').classList.contains('plan') || $('#fDate').value > today() || $('#fTodo').value.trim()) ? '' : 'none';
+}
 function planRowHtml(v){
   const d = new Date(v.date + 'T12:00'), wd = '일월화수목금토'[d.getDay()];
   const ds = `${d.getMonth() + 1}.${d.getDate()}(${wd})${v.dateEnd > v.date ? '~' + (+v.dateEnd.slice(5, 7)) + '.' + (+v.dateEnd.slice(8)) : ''}`;
   const dd = ddayText(v);
   return `<div class="item prow${v.date === today() ? ' today' : ''}" data-id="${v.id}">
-    <span class="pn">${esc(v.name)}</span>${dd ? `<span class="dday">${dd}</span>` : ''}<span class="pd">${ds}</span><span class="pt">${esc(v.time || '')}</span></div>`;
+    <span class="pn">${esc(v.name)}</span>${todoBadge(v)}${dd ? `<span class="dday">${dd}</span>` : ''}<span class="pd">${ds}</span><span class="pt">${esc(v.time || '')}</span></div>`;
 }
 function itemHtml(v){
   const n = sameCount(v.name);
@@ -871,7 +903,7 @@ function itemHtml(v){
       <span class="chk">✓</span>
       <div class="thumb">${v.photos?.length ? `<img src="${v.photos[0]}" alt="">` : catIcon(v.cat)}</div>
       <div class="info">
-        <div class="name">${v.hidden ? '🙈 ' : ''}${esc(v.name)}${n > 1 && !v.hidden ? `<span class="badge">${visitNo(v)}/${n}회</span>` : ''}${v.again ? ' 💚' : ''}${ddayHtml(v)}</div>
+        <div class="name">${v.hidden ? '🙈 ' : ''}${esc(v.name)}${n > 1 && !v.hidden ? `<span class="badge">${visitNo(v)}/${n}회</span>` : ''}${v.again ? ' 💚' : ''}${ddayHtml(v)}${todoBadge(v)}</div>
         <div class="meta">${esc(periodStr(v))} ·${esc(catName(v.cat))}${v.addr ? ' · ' + esc(v.addr) : ''}</div>
         ${v.gift ? `<div class="meta">💐 ${esc(giftStr(v.gift))}</div>` : ''}
         ${v.recv ? `<div class="meta">🎁 받음 ${v.recv.length}명${recvSum(v.recv) ? ' · ' + won(recvSum(v.recv)) : ''}</div>` : ''}
@@ -1792,6 +1824,7 @@ function openForm(v, preset){
   showRecv(editing.recv ? recvText(editing.recv) : null);
   $('#fAddr').value = editing.addr; $('#fWith').value = editing.with; $('#fMemo').value = editing.memo;
   $('#fAgain').checked = !!editing.again;
+  $('#fTodo').value = todoText(editing.todo); showTodoRow();
   $('#fDelete').style.display = v ? '' : 'none';
   renderRate(); renderPhotos(); showFormPlace();
   $('#formSheet').classList.add('on'); $('#formSheet').scrollTop = 0;
@@ -1983,7 +2016,7 @@ $('#fGiftQuick').addEventListener('click', e => {
 $('#fCat').addEventListener('change', () => {
   if ($('#fGiftRow').style.display === 'none' && GIFT_CAT.test(catName($('#fCat').value))) showGift({});
 });
-$('#fDate').addEventListener('change', endInfo);
+$('#fDate').addEventListener('change', () => { endInfo(); showTodoRow(); });
 $('#fDateEnd').addEventListener('change', endInfo);
 function showFormPlace(){
   const p = editing?.place;
@@ -2014,6 +2047,7 @@ $('#fSave').addEventListener('click', async () => {
   let name = $('#fName').value.trim();
   if (!name && $('#formSheet').classList.contains('plan')) {   // 일정: 메모 첫 줄이 제목
     name = $('#fMemo').value.trim().split('\n')[0].slice(0, 40);
+    if (!name) name = parseTodo($('#fTodo').value)[0]?.t.slice(0, 40) || '';   // 메모가 없으면 할 일 첫 줄
     if (!name) { toast('무슨 일정인지 메모에 적어 주세요'); $('#fMemo').focus(); return; }
   }
   if (!name) { toast('장소 이름을 적어 주세요'); $('#fName').focus(); return; }
@@ -2030,6 +2064,7 @@ $('#fSave').addEventListener('click', async () => {
   } else delete editing.gift;
   const rl = $('#fRecvRow').style.display !== 'none' ? parseRecv($('#fRecv').value) : [];
   if (rl.length) editing.recv = rl; else delete editing.recv;
+  const td = parseTodo($('#fTodo').value); if (td.length) editing.todo = td; else delete editing.todo;
   const fromPlan = editing.fromPlan; delete editing.fromPlan;
   // 일정(오늘·앞날짜)을 새로 넣었거나 날짜·시간을 바꿨으면 저장 뒤 폰 달력에 넣을지 물음
   const old = findVisit(editing.id);
@@ -2073,6 +2108,8 @@ function openDetail(id){
       ${v.gift ? `<br>💐 ${esc(giftStr(v.gift))}` : ''}
     </div>
     ${v.memo ? `<div class="memo">${esc(v.memo)}</div>` : ''}
+    ${v.todo?.length ? `<div class="todo"><h3>✅ 해야 할 일 ${v.todo.filter(x => x.done).length}/${v.todo.length}</h3>
+      ${v.todo.map((x, i) => `<label class="${x.done ? 'done' : ''}"><input type="checkbox" data-todo="${i}"${x.done ? ' checked' : ''}><span>${esc(x.t)}</span></label>`).join('')}</div>` : ''}
     ${v.recv ? `<div class="panel" style="margin-top:14px"><h3>🎁 받은 명단 ${v.recv.length}명${recvSum(v.recv) ? ' · ' + won(recvSum(v.recv)) : ''}</h3><div class="history">
       ${v.recv.map(r => { const o = giveRecvOf(r.who, v.id);
         return `<a data-person="${esc(r.who)}">• ${esc(r.who)}${r.rel ? ` (${esc(r.rel)})` : ''}${r.amount ? ' ' + won(r.amount) : ''}</a>${o.gN ? ` <span class="hint">— 내가 낸 것 ${o.gN}번${o.gAmt ? ' ' + won(o.gAmt) : ''}</span>` : ''}`; }).join('<br>')}</div></div>` : ''}
@@ -2105,6 +2142,12 @@ function openDetail(id){
   $('#dAgain').onclick = () => openForm(null, {name:v.name, cat:v.cat, addr:v.addr, lat:v.lat, lng:v.lng, again:v.again, place:v.place});
   const df = $('#dFind'); if (df) df.onclick = () => openPlaceFor({kind: 'visit', id: v.id}, v.name, true);
   $('#dEdit2').onclick = () => openForm(v);
+  $('#dBody').querySelectorAll('[data-todo]').forEach(cb => cb.onchange = async () => {
+    const todo = v.todo.map((x, i) => i === +cb.dataset.todo ? {t: x.t, done: cb.checked} : x);
+    try { await DB.put(Object.assign({}, v, {todo, updated: Date.now()})); } catch { toast('저장 실패'); return; }
+    await reload(); syncSoon(); openDetail(v.id);
+    if (todo.every(x => x.done)) toast('할 일을 다 했습니다 👍');
+  });
   const dc = $('#dCal'); if (dc) dc.onclick = () => askCal(v);
   $('#dHide').onclick = async () => {
     await setHidden([v.id], !v.hidden);
@@ -2868,7 +2911,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.16.0';
+const APP_VERSION = 'v1.17.0';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
