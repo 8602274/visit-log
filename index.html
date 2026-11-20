@@ -207,6 +207,8 @@ nav button.on{color:var(--accent);font-weight:700}
 #calAsk .in{background:var(--bg);width:100%;max-width:560px;border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
 /* [＋ 일정 추가] 입력 화면: 날짜·시간·메모만 */
 #formSheet.plan .full{display:none!important}
+#formSheet.plan .full.keep{display:block!important}   /* 일정 화면에도 제목 칸 (v1.17.1) */
+#formSheet.plan #fFind{display:none}
 #fMore{display:none}#formSheet.plan #fMore{display:block}
 #formSheet.plan #fMemo{min-height:140px}
 /* [📍 장소만 추가] 입력 화면: 장소 이름·찾기·주소·위치만 (v1.16.0) */
@@ -494,7 +496,7 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
   </div>
   <div class="body">
     <div class="full keep">
-    <label class="f">장소 이름 * <button class="mic" type="button" data-mic="fName">🎤</button></label>
+    <label class="f"><span id="fNameLbl">장소 이름 *</span> <button class="mic" type="button" data-mic="fName">🎤</button></label>
     <div class="tools" style="margin:0">
       <input id="fName" list="nameList" placeholder="예: 강릉 초당순두부" autocomplete="off">
       <button class="btn" id="fFind" type="button" style="flex:0 0 auto">🔍 찾기</button>
@@ -1594,7 +1596,7 @@ $('#calAsk').addEventListener('click', e => { if (e.target.id === 'calAsk') clos
 $('#caAlways').addEventListener('change', e => { lsSet('calAsk', e.target.checked); toast(e.target.checked ? '일정 저장할 때마다 묻습니다' : '이제 안 묻습니다 — 상세 화면의 [📅 폰 달력에 넣기]로 넣으세요'); });
 $('#fMore').addEventListener('click', () => {
   if ($('#formSheet').classList.contains('po')) $('#fTitle').textContent = '새 방문';
-  $('#formSheet').classList.remove('plan', 'po'); $('#fDateLbl').textContent = '방문 날짜';
+  $('#formSheet').classList.remove('plan', 'po'); setNameLbl(false); $('#fDateLbl').textContent = '방문 날짜';
   setTimeout(() => pickMap?.invalidateSize(), 50);
 });
 function openVoice(){
@@ -1812,7 +1814,8 @@ function openForm(v, preset){
   const plan = !v && formPlanMode;   // [＋ 일정 추가]로 연 화면 = 날짜·시간·메모만
   $('#formSheet').classList.toggle('plan', plan);
   $('#fDateLbl').textContent = plan ? '날짜' : '방문 날짜';
-  $('#fMemo').placeholder = plan ? '무슨 일정인지 적으세요 — 첫 줄이 일정 제목이 됩니다' : '먹은 메뉴, 가격, 느낀 점, 다음에 할 것…';
+  $('#fMemo').placeholder = plan ? '자세한 내용 (선택)' : '먹은 메뉴, 가격, 느낀 점, 다음에 할 것…';
+  setNameLbl(plan);
   if (plan) $('#fTitle').textContent = '새 일정';
   const po = !v && formPlaceMode;
   $('#formSheet').classList.toggle('po', po);
@@ -1829,9 +1832,14 @@ function openForm(v, preset){
   renderRate(); renderPhotos(); showFormPlace();
   $('#formSheet').classList.add('on'); $('#formSheet').scrollTop = 0;
   initPickMap();
-  if (!v && !again) setTimeout(() => $(plan ? '#fMemo' : '#fName').focus(), 100);
+  if (!v && !again) setTimeout(() => $('#fName').focus(), 100);
 }
 // 여행 기간: [🧳 여행 기간 넣기]를 누르면 끝나는 날 칸이 열림. 빈 칸·시작일 이전이면 하루짜리로 저장
+// 일정 화면에선 이름 칸 = 일정 제목
+function setNameLbl(plan){
+  $('#fNameLbl').textContent = plan ? '일정 제목 *' : '장소 이름 *';
+  $('#fName').placeholder = plan ? '예: 김철수 아들 결혼식' : '예: 강릉 초당순두부';
+}
 function showEnd(end){
   $('#fDateEnd').value = end;
   $('#fEndRow').style.display = end ? '' : 'none';
@@ -2048,7 +2056,7 @@ $('#fSave').addEventListener('click', async () => {
   if (!name && $('#formSheet').classList.contains('plan')) {   // 일정: 메모 첫 줄이 제목
     name = $('#fMemo').value.trim().split('\n')[0].slice(0, 40);
     if (!name) name = parseTodo($('#fTodo').value)[0]?.t.slice(0, 40) || '';   // 메모가 없으면 할 일 첫 줄
-    if (!name) { toast('무슨 일정인지 메모에 적어 주세요'); $('#fMemo').focus(); return; }
+    if (!name) { toast('일정 제목을 적어 주세요'); $('#fName').focus(); return; }
   }
   if (!name) { toast('장소 이름을 적어 주세요'); $('#fName').focus(); return; }
   Object.assign(editing, {name, date:$('#fDate').value, cat:$('#fCat').value, addr:$('#fAddr').value.trim(),
@@ -2911,7 +2919,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.17.0';
+const APP_VERSION = 'v1.17.1';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
