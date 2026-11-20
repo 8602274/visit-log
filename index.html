@@ -261,6 +261,7 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
 <header>
   <h1>📍 그날그곳</h1>
   <span class="count" id="countTxt"></span>
+  <button class="btn" id="btnHid" type="button" title="숨긴 기록 보기" style="flex:0 0 auto;padding:4px 10px;font-size:13px;margin-left:6px">🙈 숨긴 기록</button>
 </header>
 
 <main>
@@ -778,7 +779,17 @@ function renderChips(){
   const nh = allVisits.length - visits.length;
   if (nh || filterCat === '__hidden') html.push(`<button class="chip ${filterCat==='__hidden'?'on':''}" data-c="__hidden">🙈 숨긴 기록 ${nh}</button>`);
   $('#catChips').innerHTML = html.join('');
+  const bh = $('#btnHid');
+  bh.textContent = filterCat === '__hidden' ? '↩ 전체 보기' : '🙈 숨긴 기록' + (nh ? ' ' + nh : '');
+  bh.classList.toggle('primary', filterCat === '__hidden');
 }
+// 검색줄 [🙈] = 숨긴 기록만 보기 ↔ 다시 누르면 [전체]
+$('#btnHid').addEventListener('click', () => {
+  showTab('list'); $('#q').value = '';
+  filterCat = filterCat === '__hidden' ? '' : '__hidden'; selIds.clear();
+  if (!filterCat) $('#sort').value = 'date';
+  renderChips(); renderList();
+});
 $('#catChips').addEventListener('click', e => {
   const b = e.target.closest('.chip'); if (!b) return;
   filterCat = b.dataset.c; selIds.clear();
@@ -2841,7 +2852,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.15.1';
+const APP_VERSION = 'v1.15.2';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
