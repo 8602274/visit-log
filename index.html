@@ -521,7 +521,10 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
     </div>
     <label class="f">시간 (선택)</label>
     <div class="tools" style="margin:0">
-      <input id="fTime" type="time" step="300">
+      <!-- v1.17.3 크롬 시간 칸은 시·분·오전오후를 다 골라야 값이 생겨 저장이 안 되던 것 → 시·분 목록으로 고름 (값은 숨긴 #fTime) -->
+      <input id="fTime" type="hidden">
+      <select id="fTimeH" aria-label="시"><option value="">시 —</option></select>
+      <select id="fTimeM" aria-label="분"></select>
       <button class="btn" id="fTimeOff" type="button" style="flex:0 0 auto">시간 빼기</button>
     </div>
     <div class="full">
@@ -1823,7 +1826,7 @@ function openForm(v, preset){
   const po = !v && formPlaceMode;
   $('#formSheet').classList.toggle('po', po);
   if (po) $('#fTitle').textContent = '새 장소';
-  $('#fName').value = editing.name; $('#fDate').value = editing.date; $('#fTime').value = editing.time || '';
+  $('#fName').value = editing.name; $('#fDate').value = editing.date; $('#fTime').value = editing.time || ''; syncTimeSel();
   showEnd(editing.dateEnd > editing.date ? editing.dateEnd : '');
   fillCatSelect(editing.cat);
   showGift(editing.gift || (!v && GIFT_CAT.test(catName(editing.cat)) ? {} : null));
@@ -2053,7 +2056,21 @@ function closeForm(){ $('#formSheet').classList.remove('on'); editing = null; }
 // 달력에서 날짜를 골라 둔 채 ＋를 누르면 그 날짜로
 $('#fab').addEventListener('click', () => openForm(null, $('#tab-cal').classList.contains('on') && calSel ? {date:calSel} : undefined));
 $('#fCancel').addEventListener('click', closeForm);
-$('#fTimeOff').addEventListener('click', () => { $('#fTime').value = ''; });
+// 시간 고르기: 시를 고르면 분은 00으로 바로 들어가 저장됨
+(() => {
+  const h = $('#fTimeH'), m = $('#fTimeM');
+  for (let i = 0; i < 24; i++) h.add(new Option(`${i < 12 ? '오전' : '오후'} ${i % 12 || 12}시`, String(i).padStart(2, '0')));
+  for (let i = 0; i < 60; i += 5) m.add(new Option(`${String(i).padStart(2, '0')}분`, String(i).padStart(2, '0')));
+  const put = () => { $('#fTime').value = h.value ? `${h.value}:${m.value || '00'}` : ''; };
+  h.addEventListener('change', put); m.addEventListener('change', () => { if (!h.value) h.value = '09'; put(); });
+})();
+function syncTimeSel(){
+  const t = $('#fTime').value, [hh, mm] = t ? t.split(':') : ['', '00'];
+  $('#fTimeH').value = hh;
+  if (![...$('#fTimeM').options].some(o => o.value === mm)) $('#fTimeM').add(new Option(`${mm}분`, mm));   // 5분 단위가 아닌 옛 시간도 그대로
+  $('#fTimeM').value = mm;
+}
+$('#fTimeOff').addEventListener('click', () => { $('#fTime').value = ''; syncTimeSel(); });
 $('#fSave').addEventListener('click', async () => {
   let name = $('#fName').value.trim();
   if (!name && $('#formSheet').classList.contains('plan')) {   // 일정: 메모 첫 줄이 제목
@@ -2931,7 +2948,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.17.2';
+const APP_VERSION = 'v1.17.3';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
