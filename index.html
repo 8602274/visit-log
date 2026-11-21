@@ -423,6 +423,9 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
     <span style="width:40px"></span>
   </div>
   <div class="body">
+    <!-- 일정 제목 : 적으면 찾은 일정 모두의 제목이 이것으로 (v1.17.2) -->
+    <label for="mTitleAll" style="display:block;font-weight:700;margin-bottom:4px">일정 제목</label>
+    <input id="mTitleAll" placeholder="비워 두면 글에서 찾은 제목을 씁니다" style="margin-bottom:8px;font-weight:700">
     <textarea id="mText" placeholder="메일 · 카톡 · 문자 내용을 복사해서 여기에 붙여 넣으세요. 붙여 넣으면 바로 정리하고 위치도 찾습니다."></textarea>
     <div class="row mBtns" style="margin-top:8px">
       <button class="btn" id="mPaste">📋 붙여넣기</button>
@@ -2620,6 +2623,8 @@ function mailRender(){
 }
 function mailCount(){ $('#mSave').textContent = `선택한 ${document.querySelectorAll('#mList .mChk:checked').length}개 일정에 넣기`; }
 function mailShow(list, how){
+  const tAll = $('#mTitleAll').value.trim();
+  if (tAll) list.forEach(e => { e.title = tAll; });   // 위에 적은 제목이 우선
   mailEvents = list;
   mailRender();
   const firstPlace = list.find(e => e.addr)?.addr;
@@ -2658,8 +2663,15 @@ $('#mText').addEventListener('paste', () => setTimeout(() => {      // 붙여 �
   const t = $('#mText').value.trim();
   if (t) mailShow(parseMsgEvents(t), '정리');
 }, 0));
+$('#mTitleAll').addEventListener('input', () => {   // 제목을 고치면 찾은 일정 카드 제목도 같이
+  const t = $('#mTitleAll').value;
+  document.querySelectorAll('#mList .mCard').forEach(c => {
+    c.querySelector('.mTitle').value = t;
+    const ev = mailEvents[+c.dataset.i]; if (ev) ev.title = t;
+  });
+});
 $('#mClose').addEventListener('click', closeMail);
-$('#mClear').addEventListener('click', () => { $('#mText').value = ''; $('#mPlace').value = ''; mailEvents = []; mailRender(); mailSay(''); $('#mText').focus(); });
+$('#mClear').addEventListener('click', () => { $('#mTitleAll').value = ''; $('#mText').value = ''; $('#mPlace').value = ''; mailEvents = []; mailRender(); mailSay(''); $('#mText').focus(); });
 $('#mPaste').addEventListener('click', async () => {
   try {
     const t = await navigator.clipboard.readText();
@@ -2699,7 +2711,7 @@ $('#mSave').addEventListener('click', async () => {
       saved.push(v.id);
     }
   } catch { toast('저장 실패: 저장 공간이 부족할 수 있습니다'); await reload(); return; }
-  $('#mText').value = ''; $('#mPlace').value = ''; mailEvents = []; mailRender(); mailSay('');
+  $('#mTitleAll').value = ''; $('#mText').value = ''; $('#mPlace').value = ''; mailEvents = []; mailRender(); mailSay('');
   closeMail();
   filterCat = '__plan'; selIds.clear(); $('#q').value = '';
   await reload(); showTab('list'); syncSoon();
@@ -2919,7 +2931,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.17.1';
+const APP_VERSION = 'v1.17.2';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
