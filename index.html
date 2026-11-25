@@ -2308,6 +2308,10 @@ async function openNear(pos){
     const d = j.documents?.[0] || {}, ra = d.road_address, a = d.address;
     near.addr = {r1: ra?.region_1depth_name || a?.region_1depth_name || '', r2: ra?.region_2depth_name || a?.region_2depth_name || '',
       road: ra?.road_name || '', dong: a?.region_3depth_name || ra?.region_3depth_name || '', full: ra?.address_name || a?.address_name || ''};
+    if (!near.addr.r2) {   // 바닷가·산처럼 번지가 없는 자리 → 행정구역만이라도
+      const g = (await relay('/v1/kakao-map/coord2region', {x: pos.lng, y: pos.lat})).documents?.find(x => x.region_type === 'B') || {};
+      Object.assign(near.addr, {r1: g.region_1depth_name || '', r2: g.region_2depth_name || '', dong: g.region_3depth_name || '', full: g.address_name || ''});
+    }
   } catch (e) {
     $('#nsWhere').textContent = `📍 ${pos.label}`;
     $('#nsMsg').textContent = '중계 서버에 연결하지 못했습니다(인터넷 연결 확인).'; return;
@@ -2315,7 +2319,13 @@ async function openNear(pos){
   const A = near.addr;
   $('#nsWhere').textContent = `📍 ${pos.label}${A.full ? ' · ' + A.full : ''}`;
   const scopes = [['dong', A.dong && `${A.r2} ${A.dong}`], ['road', A.road && `${A.road} 길가`]].filter(s => s[1]);
-  if (!scopes.some(s => s[0] === near.scope) && scopes[0]) near.scope = scopes[0][0];
+  if (!scopes.length) {   // 주소를 전혀 못 얻음 → 맛집 순위(주소 검색)는 못 하고 주변 장소만
+    $('#nsScope').innerHTML = '';
+    $('#nsMode [data-m="eat"]').style.display = 'none';
+    nearMode('kakao'); return;
+  }
+  $('#nsMode [data-m="eat"]').style.display = '';
+  if (!scopes.some(s => s[0] === near.scope)) near.scope = scopes[0][0];
   $('#nsScope').innerHTML = scopes.map(([k, t]) => `<button class="chip${k === near.scope ? ' on' : ''}" data-s="${k}">${esc(t)}</button>`).join('');
   nearRun();
 }
@@ -3197,7 +3207,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.18.0';
+const APP_VERSION = 'v1.18.1';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
