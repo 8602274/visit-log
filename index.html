@@ -85,8 +85,19 @@ textarea{min-height:90px;resize:vertical}
 .selBar .btn:disabled{opacity:.4}
 
 /* 지도 */
-#bigMap{height:calc(100vh - 170px);border-radius:14px;overflow:hidden;position:relative;z-index:0}   /* 지도 층(400 이상)이 둥근 단추 위로 올라오지 않게 */
+#bigMap{height:calc(100vh - 220px);border-radius:14px;overflow:hidden;position:relative;z-index:0}   /* 지도 층(400 이상)이 둥근 단추 위로 올라오지 않게 */
 .leaflet-popup-content{font-family:inherit}
+/* 근처 맛집·장소 */
+.near{background:var(--card);border-radius:14px;padding:12px;margin-bottom:8px;box-shadow:var(--shadow);font-size:14px;line-height:1.55}
+.near .nm{font-weight:700;font-size:16px}
+.near .nm a{font-size:12px;font-weight:600;color:var(--accent);margin-left:6px;white-space:nowrap}
+.near .sub{color:var(--sub);font-size:13px}
+.near .rk{font-weight:700;color:var(--accent)}
+.near .fl span{display:inline-block;font-size:12px;border-radius:6px;padding:0 6px;margin:2px 4px 0 0;background:var(--accent-soft);color:var(--accent)}
+.near .fl span.no{background:none;color:var(--sub);border:1px solid var(--line)}
+.near .act{display:flex;gap:6px;margin-top:8px}
+.near .act .btn{padding:6px 10px;font-size:13px}
+.drive{background:var(--accent-soft);border-radius:12px;padding:10px 12px;margin-top:8px;font-size:14px;line-height:1.6}
 
 /* 달력 */
 .calHead{display:flex;align-items:center;gap:8px;margin-bottom:10px}
@@ -300,6 +311,7 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
 
   <!-- 지도 -->
   <section class="tab" id="tab-map">
+    <div class="row" style="margin-bottom:8px"><button class="btn" id="btnNearMe">🍽️ 내 주변 맛집·장소</button></div>
     <div id="bigMap"></div>
   </section>
 
@@ -653,6 +665,39 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:14px 0 6px;font-wei
     <button class="btn primary block" id="psSave">이 장소로 저장</button>
     <div style="height:8px"></div>
     <button class="btn block" id="psNameOnly">검색 없이 이름만 저장</button>
+    <div style="height:40px"></div>
+  </div>
+</div>
+
+<!-- 근처 맛집·장소 시트 (eat.pl 매출 순위 · 카카오 주변 장소) -->
+<div class="sheet" id="nearSheet">
+  <div class="top">
+    <button id="nsClose">‹ 닫기</button>
+    <h2>근처 맛집·장소</h2>
+    <span style="width:52px"></span>
+  </div>
+  <div class="body">
+    <div class="hint" id="nsWhere"></div>
+    <div class="chips" id="nsMode">
+      <button class="chip on" data-m="eat">🏆 매출 순위 맛집</button>
+      <button class="chip" data-m="kakao">📍 주변 장소</button>
+    </div>
+    <div id="nsEatBox">
+      <div class="chips" id="nsScope"></div>
+      <div class="chips" id="nsGenre"></div>
+      <div class="chips" id="nsFlag">
+        <button class="chip" data-f="loclPrsnPpltYn">🏘️ 동네 맛집</button>
+        <button class="chip" data-f="frnrVsitYn">🌏 외국인 방문</button>
+        <button class="chip" data-f="empyVsitYn">🍻 회식 적합</button>
+      </div>
+    </div>
+    <div id="nsKakaoBox" style="display:none">
+      <div class="chips" id="nsCat"></div>
+      <div class="chips" id="nsRad"></div>
+    </div>
+    <div class="hint" id="nsMsg"></div>
+    <div id="nsList" style="margin-top:6px"></div>
+    <div class="hint" id="nsFoot" style="margin-top:8px"></div>
     <div style="height:40px"></div>
   </div>
 </div>
@@ -2145,7 +2190,9 @@ function openDetail(id){
       <div class="row">${v.place?.url ? `<a class="btn" href="${esc(v.place.url)}" target="_blank" rel="noopener">가게 정보</a>` : ''}
       <a class="btn" href="https://map.kakao.com/link/map/${encodeURIComponent(v.name)},${v.lat},${v.lng}" target="_blank" rel="noopener">카카오맵</a>
       <a class="btn" href="https://map.kakao.com/link/to/${encodeURIComponent(v.name)},${v.lat},${v.lng}" target="_blank" rel="noopener">길찾기</a>
-      <a class="btn" href="https://map.naver.com/p/search/${encodeURIComponent(v.addr || v.name)}?c=${v.lng},${v.lat},16,0,0,0,dh" target="_blank" rel="noopener">네이버지도</a></div>` : ''}
+      <a class="btn" href="https://map.naver.com/p/search/${encodeURIComponent(v.addr || v.name)}?c=${v.lng},${v.lat},16,0,0,0,dh" target="_blank" rel="noopener">네이버지도</a></div>
+      <div class="row" style="margin-top:8px"><button class="btn" id="dNear">🍽️ 근처 맛집·장소</button><button class="btn" id="dDriveBtn">🚗 내 위치에서 차로</button></div>
+      <div id="dDrive"></div>` : ''}
     ${!v.place ? `<div style="height:10px"></div><button class="btn block" id="dFind">🔍 장소 찾아 ${v.lat == null ? '지도·' : ''}가게 정보 넣기</button>` : ''}
     ${hist.length > 1 ? `<div class="panel" style="margin-top:14px"><h3>이곳 방문 이력 (${hist.length}회)</h3><div class="history">
       ${hist.map(h => h.id === v.id ? `<b>• ${esc(h.date)} ${starStr(h.rating)}</b>` : `<a data-open="${h.id}">• ${esc(h.date)} ${starStr(h.rating)}</a>`).join('<br>')}</div></div>` : ''}
@@ -2169,6 +2216,8 @@ function openDetail(id){
   }
   $('#dAgain').onclick = () => openForm(null, {name:v.name, cat:v.cat, addr:v.addr, lat:v.lat, lng:v.lng, again:v.again, place:v.place});
   const df = $('#dFind'); if (df) df.onclick = () => openPlaceFor({kind: 'visit', id: v.id}, v.name, true);
+  const dn = $('#dNear'); if (dn) dn.onclick = () => openNear({lat: v.lat, lng: v.lng, label: v.name});
+  const dd = $('#dDriveBtn'); if (dd) dd.onclick = () => driveTo(v, $('#dDrive'));
   $('#dEdit2').onclick = () => openForm(v);
   $('#dBody').querySelectorAll('[data-todo]').forEach(cb => cb.onchange = async () => {
     const todo = v.todo.map((x, i) => i === +cb.dataset.todo ? {t: x.t, done: cb.checked} : x);
@@ -2210,9 +2259,209 @@ window.addEventListener('popstate', () => {
   sheetObserver.depth = Math.max(0, (sheetObserver.depth || 1) - 1);
   if ($('#viewer').classList.contains('on')) $('#viewer').classList.remove('on');
   else if ($('#placeSheet').classList.contains('on')) closePlace();     // 장소 찾기는 폼·상세 위에 뜨므로 먼저
+  else if ($('#nearSheet').classList.contains('on')) closeNear();
   else if ($('#formSheet').classList.contains('on')) closeForm();
   else if ($('#detailSheet').classList.contains('on')) closeDetail();
 });
+
+/* ---------- 근처 맛집·장소 (k-skill: bccard-eatpl-search · kakao-map) ---------- */
+// k-skill-proxy 는 브라우저 호출(CORS)을 막아서 내 Cloudflare Worker(yang1\visit-relay)를 거쳐 부름
+const RELAY = localStorage.getItem('relayUrl') || 'https://visit-relay.visit-relay.workers.dev';   // relayUrl = 시험용(wrangler dev)
+async function relay(path, params){
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params || {})) (Array.isArray(v) ? v : [v]).forEach(x => x != null && x !== '' && qs.append(k, x));
+  const r = await fetch(`${RELAY}${path}?${qs}`);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+function myPos(){
+  return new Promise((res, rej) => {
+    if (!navigator.geolocation) return rej(new Error('이 브라우저는 위치를 지원하지 않습니다'));
+    navigator.geolocation.getCurrentPosition(p => res({lat: p.coords.latitude, lng: p.coords.longitude}),
+      () => rej(new Error('현재 위치를 못 얻었습니다(위치 권한 확인)')), {enableHighAccuracy: true, timeout: 15000, maximumAge: 60000});
+  });
+}
+const EAT_GENRES = [   // [이름, 서버 업종값 | null, 업종 글자 거르기]
+  ['전체', null, null], ['카페', '카페', null], ['한식', null, /한식|백반|한정식|찜|탕|찌개|국밥|국수|냉면|전\/|죽|도시락|김밥/],
+  ['고기', null, /고기|곱창|족발|보쌈|양꼬치|갈비|삼겹/], ['일식', null, /일식|스시|초밥|라멘|돈가스|이자카야|우동/],
+  ['중식', null, /중식|마라|짜장|양꼬치/], ['양식·외국', null, /양식|외국|아시안|버거|피자|파스타|스테이크|브런치|샐러드|샌드위치/],
+  ['회·해산물', null, /횟집|회|해산물|조개|생선/], ['치킨', null, /치킨/], ['분식', '분식', null], ['주점', '주점', null],
+  ['빵·디저트', null, /빵|베이커리|도넛|케이크|디저트|아이스크림|빙수/]];
+const NEAR_CATS = [['FD6','🍽️ 음식점'],['CE7','☕ 카페'],['PK6','🅿️ 주차장'],['AT4','🏞️ 관광명소'],['CT1','🎭 문화시설'],['AD5','🏨 숙박'],
+  ['CS2','🏪 편의점'],['PM9','💊 약국'],['HP8','🏥 병원'],['OL7','⛽ 주유소'],['SW8','🚇 지하철역'],['MT1','🛒 대형마트']];
+const NEAR_RAD = [300, 500, 1000, 2000];
+let near = null;   // {lat,lng,label, addr:{r1,r2,road,dong,full}, mode, scope, genre, flags:Set, cat, rad, eat:{key:items}, rate:{}}
+
+async function openNear(pos){
+  near = {lat: pos.lat, lng: pos.lng, label: pos.label, addr: null, mode: 'eat', scope: 'dong', genre: 0, flags: new Set(), cat: 'FD6', rad: 500, eat: {}, rate: {}};
+  $('#nsList').innerHTML = ''; $('#nsFoot').textContent = '';
+  document.querySelectorAll('#nsFlag .chip').forEach(b => b.classList.remove('on'));
+  $('#nsGenre').innerHTML = EAT_GENRES.map((g, i) => `<button class="chip${i ? '' : ' on'}" data-g="${i}">${g[0]}</button>`).join('');
+  $('#nsCat').innerHTML = NEAR_CATS.map(([c, n]) => `<button class="chip${c === near.cat ? ' on' : ''}" data-c="${c}">${n}</button>`).join('');
+  $('#nsRad').innerHTML = NEAR_RAD.map(r => `<button class="chip${r === near.rad ? ' on' : ''}" data-r="${r}">${r < 1000 ? r + 'm' : r / 1000 + 'km'} 안</button>`).join('');
+  $('#nsScope').innerHTML = '';
+  nearMode('eat', true);
+  $('#nsWhere').textContent = `📍 ${pos.label} — 주소 확인 중…`;
+  $('#nearSheet').classList.add('on'); $('#nearSheet').scrollTop = 0;
+  try {
+    const j = await relay('/v1/kakao-map/coord2address', {x: pos.lng, y: pos.lat});
+    const d = j.documents?.[0] || {}, ra = d.road_address, a = d.address;
+    near.addr = {r1: ra?.region_1depth_name || a?.region_1depth_name || '', r2: ra?.region_2depth_name || a?.region_2depth_name || '',
+      road: ra?.road_name || '', dong: a?.region_3depth_name || ra?.region_3depth_name || '', full: ra?.address_name || a?.address_name || ''};
+  } catch (e) {
+    $('#nsWhere').textContent = `📍 ${pos.label}`;
+    $('#nsMsg').textContent = '중계 서버에 연결하지 못했습니다(인터넷 연결 확인).'; return;
+  }
+  const A = near.addr;
+  $('#nsWhere').textContent = `📍 ${pos.label}${A.full ? ' · ' + A.full : ''}`;
+  const scopes = [['dong', A.dong && `${A.r2} ${A.dong}`], ['road', A.road && `${A.road} 길가`]].filter(s => s[1]);
+  if (!scopes.some(s => s[0] === near.scope) && scopes[0]) near.scope = scopes[0][0];
+  $('#nsScope').innerHTML = scopes.map(([k, t]) => `<button class="chip${k === near.scope ? ' on' : ''}" data-s="${k}">${esc(t)}</button>`).join('');
+  nearRun();
+}
+function closeNear(){ $('#nearSheet').classList.remove('on'); }
+function nearMode(m, quiet){
+  near.mode = m;
+  document.querySelectorAll('#nsMode .chip').forEach(b => b.classList.toggle('on', b.dataset.m === m));
+  $('#nsEatBox').style.display = m === 'eat' ? '' : 'none';
+  $('#nsKakaoBox').style.display = m === 'kakao' ? '' : 'none';
+  if (!quiet) nearRun();
+}
+function nearRun(){ if (near?.addr) (near.mode === 'eat' ? eatRun() : kakaoNearRun()); }
+
+const hhmm = s => /^\d{4}$/.test(s || '') ? s.slice(0, 2) + ':' + s.slice(2) : '';
+function openHours(s, e){
+  const a = hhmm(s), b = hhmm(e); if (!a || !b) return '';
+  return `영업 예상 시간 ${a}–${b < a ? '익일 ' : ''}${b}`;
+}
+const pct = n => n == null || n === '' ? '?' : (+n < 1 ? String(+n) : String(Math.round(+n * 10) / 10));
+
+async function eatRun(){
+  const A = near.addr, g = EAT_GENRES[near.genre];
+  const loc = `${A.r1} ${A.r2} ${near.scope === 'road' ? A.road : A.dong}`.trim();
+  const key = loc + '|' + (g[1] || '');
+  $('#nsMsg').textContent = '찾는 중…'; $('#nsList').innerHTML = ''; $('#nsFoot').textContent = '';
+  if (!near.eat[key]) {
+    try {
+      const j = await relay('/v1/bccard-eatpl/search', {location: loc, merTpbuzNm: g[1] || ''});
+      near.eat[key] = (j.items || []).filter(x => /^https:\/\/web\.paybooc\.ai\//.test(x.merUrl || ''));
+    } catch { $('#nsMsg').textContent = '맛집을 불러오지 못했습니다. 잠시 뒤 다시 해 보세요.'; return; }
+  }
+  let rows = near.eat[key];
+  if (g[2]) rows = rows.filter(x => g[2].test(x.merTpbuzNm || ''));
+  for (const f of near.flags) rows = rows.filter(x => x[f]);
+  if (!rows.length) { $('#nsMsg').textContent = '이 조건으로는 매장을 찾지 못했습니다. 범위나 종류를 바꿔 보세요.'; return; }
+  $('#nsMsg').textContent = `${esc(loc)} — 최근 1개월 BC카드 결제 매출 순 ${rows.length}곳`;
+  near.rows = rows;
+  $('#nsList').innerHTML = rows.map((x, i) => {
+    const rk = near.rate[x.merNm + '|' + x.merAddr];
+    const cust = Object.values(x.vistCstmrRnkList || {}).filter(Boolean).join('·');
+    const yn = (b, t) => `<span class="${b ? '' : 'no'}">${t} ${b ? '○' : '×'}</span>`;
+    return `<div class="near" data-i="${i}">
+      <div class="nm">${i + 1}. ${esc(x.merNm)}<a href="${esc(x.merUrl)}" target="_blank" rel="noopener">eat.pl 상세 ↗</a></div>
+      <div class="sub">${esc(x.merAddr || '')}</div>
+      <div>${esc(x.merTpbuzNm || '')} · 전국 매출 상위 <span class="rk">${pct(x.allSaleRnk)}%</span> · 지역 매출 상위 <span class="rk">${pct(x.ccgSaleRnk)}%</span>
+        · 카카오맵 평점 <span class="kr" data-k="${i}">${rk ? rateStr(rk) : '…'}</span></div>
+      <div class="fl">${yn(x.loclPrsnPpltYn, '동네 맛집')}${yn(x.frnrVsitYn, '외국인 방문')}${yn(x.empyVsitYn, '회식 적합')}</div>
+      <div class="sub">${openHours(x.srtTime, x.endTime) || '영업 예상 시간 미확인'}${x.congestionDwk || x.congestionTizn ? ` · 붐빔 ${esc(x.congestionDwk || '')}요일 ${esc(x.congestionTizn || '')}` : ''}${cust ? ` · 주요 고객 ${esc(cust)}` : ''}</div>
+      <div class="act">${x.merTpno ? `<a class="btn" href="tel:${esc(x.merTpno)}">📞 전화</a>` : ''}
+        <a class="btn" href="https://map.kakao.com/?q=${encodeURIComponent(x.merNm + ' ' + (x.merAddr || '').split('(')[0])}" target="_blank" rel="noopener">카카오맵</a>
+        <button class="btn" data-rec="${i}">＋ 방문 기록</button></div></div>`;
+  }).join('');
+  $('#nsFoot').innerHTML = 'eat.pl 잇플 · BC카드 결제 데이터 기반. 순서는 최근 1개월 결제 매출 순이며 매출액이 아니라 상위 %로만 나타냅니다(작을수록 위).<br>' +
+    '영업 예상 시간은 결제 승인 시각으로 추정한 것이라 공식 영업시간이 아닙니다. 전화번호는 틀릴 수 있습니다. 카카오맵 평점은 카카오맵 이용자 평점입니다.';
+  eatRatings(rows.slice(0, 20));
+}
+function rateStr(r){ return r.status === 'ok' ? `★${r.rating} (리뷰 ${r.reviewCount ?? '?'})` : '미확인'; }
+async function eatRatings(rows){
+  const need = rows.filter(x => !near.rate[x.merNm + '|' + x.merAddr]);
+  if (need.length) {
+    try {
+      const j = await relay('/rating', {name: need.map(x => x.merNm), address: need.map(x => x.merAddr || '')});
+      need.forEach((x, i) => near.rate[x.merNm + '|' + x.merAddr] = j.items?.[i] || {status: 'error'});
+    } catch { need.forEach(x => near.rate[x.merNm + '|' + x.merAddr] = {status: 'error'}); }
+  }
+  (near.rows || []).forEach((x, i) => {
+    const el = document.querySelector(`#nsList .kr[data-k="${i}"]`), r = near.rate[x.merNm + '|' + x.merAddr];
+    if (el) el.textContent = r ? rateStr(r) : '미확인';
+  });
+}
+
+async function kakaoNearRun(){
+  $('#nsMsg').textContent = '찾는 중…'; $('#nsList').innerHTML = ''; $('#nsFoot').textContent = '';
+  let docs = [];
+  try {
+    for (let page = 1; page <= 3; page++) {   // 15곳씩 3쪽(45곳)까지
+      const j = await relay('/v1/kakao-map/search/category', {category_group_code: near.cat, x: near.lng, y: near.lat, radius: near.rad, sort: 'distance', page, size: 15});
+      docs = docs.concat(j.documents || []);
+      if (j.meta?.is_end !== false) break;
+    }
+  } catch { $('#nsMsg').textContent = '주변 장소를 불러오지 못했습니다. 잠시 뒤 다시 해 보세요.'; return; }
+  const cn = NEAR_CATS.find(c => c[0] === near.cat)[1];
+  if (!docs.length) { $('#nsMsg').textContent = `반경 안에 ${cn.slice(2)}이(가) 없습니다. 거리를 늘려 보세요.`; return; }
+  near.kdocs = docs;
+  $('#nsMsg').textContent = `${cn} ${docs.length}곳 — 가까운 순`;
+  $('#nsList').innerHTML = docs.map((d, i) => `<div class="near">
+      <div class="nm">${esc(d.place_name)}<a href="${esc(d.place_url)}" target="_blank" rel="noopener">카카오맵 ↗</a></div>
+      <div class="sub">${esc((d.category_name || '').split(' > ').slice(-2).join(' > '))} · ${d.distance ? (+d.distance >= 1000 ? (d.distance / 1000).toFixed(1) + 'km' : d.distance + 'm') : ''}</div>
+      <div class="sub">${esc(d.road_address_name || d.address_name || '')}</div>
+      <div class="act">${d.phone ? `<a class="btn" href="tel:${esc(d.phone)}">📞 전화</a>` : ''}
+        <a class="btn" href="https://map.kakao.com/link/to/${encodeURIComponent(d.place_name)},${d.y},${d.x}" target="_blank" rel="noopener">길찾기</a>
+        <button class="btn" data-krec="${i}">＋ 방문 기록</button></div></div>`).join('');
+  $('#nsFoot').textContent = '카카오 지도 장소 정보 기준입니다.';
+}
+
+$('#nsClose').addEventListener('click', closeNear);
+$('#nsMode').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (b && near) nearMode(b.dataset.m); });
+$('#nsScope').addEventListener('click', e => { const b = e.target.closest('[data-s]'); if (!b) return;
+  near.scope = b.dataset.s; document.querySelectorAll('#nsScope .chip').forEach(x => x.classList.toggle('on', x === b)); eatRun(); });
+$('#nsGenre').addEventListener('click', e => { const b = e.target.closest('[data-g]'); if (!b) return;
+  near.genre = +b.dataset.g; document.querySelectorAll('#nsGenre .chip').forEach(x => x.classList.toggle('on', x === b)); eatRun(); });
+$('#nsFlag').addEventListener('click', e => { const b = e.target.closest('[data-f]'); if (!b) return;
+  near.flags.has(b.dataset.f) ? near.flags.delete(b.dataset.f) : near.flags.add(b.dataset.f); b.classList.toggle('on'); eatRun(); });
+$('#nsCat').addEventListener('click', e => { const b = e.target.closest('[data-c]'); if (!b) return;
+  near.cat = b.dataset.c; document.querySelectorAll('#nsCat .chip').forEach(x => x.classList.toggle('on', x === b)); kakaoNearRun(); });
+$('#nsRad').addEventListener('click', e => { const b = e.target.closest('[data-r]'); if (!b) return;
+  near.rad = +b.dataset.r; document.querySelectorAll('#nsRad .chip').forEach(x => x.classList.toggle('on', x === b)); kakaoNearRun(); });
+$('#nsList').addEventListener('click', e => {
+  const r = e.target.closest('[data-rec]'), k = e.target.closest('[data-krec]');
+  if (r) {   // eat.pl 매장은 지도 좌표가 없어서 이름·주소만 — 폼의 [🔍 찾기]로 위치를 넣음
+    const x = near.rows[+r.dataset.rec];
+    const cat = catFromKakao(/카페|빵|디저트|아이스크림/.test(x.merTpbuzNm || '') ? '카페' : '음식점');
+    closeNear(); closeDetail();
+    openForm(null, {name: x.merNm, addr: (x.merAddr || '').replace(/\s*\(.*\)\s*$/, ''), cat, memo: `eat.pl ${x.merTpbuzNm || ''} · 전국 매출 상위 ${pct(x.allSaleRnk)}%`});
+    $('#fTitle').textContent = '새 방문';
+  } else if (k) {
+    const d = near.kdocs[+k.dataset.krec];
+    const pl = {id: d.id, name: d.place_name, addr: d.address_name, road: d.road_address_name, phone: d.phone,
+      cat: (d.category_name || '').split(' > ').slice(-2).join(' > '), url: d.place_url};
+    closeNear(); closeDetail();
+    openForm(null, {name: d.place_name, addr: d.road_address_name || d.address_name || '', cat: catFromKakao(d.category_name || ''),
+      lat: +(+d.y).toFixed(6), lng: +(+d.x).toFixed(6), place: visitPlace(pl)});
+    $('#fTitle').textContent = '새 방문';
+  }
+});
+$('#btnNearMe').addEventListener('click', async () => {
+  toast('현재 위치 찾는 중…');
+  try { const p = await myPos(); openNear({...p, label: '내 위치'}); } catch (e) { toast(e.message); }
+});
+
+// 🚗 자동차 길찾기 (카카오모빌리티) — 내 위치 → 이 장소
+async function driveTo(v, box){
+  box.innerHTML = '<div class="drive">현재 위치 찾는 중…</div>';
+  let p; try { p = await myPos(); } catch (e) { box.innerHTML = `<div class="drive">${esc(e.message)}</div>`; return; }
+  box.innerHTML = '<div class="drive">경로 계산 중…</div>';
+  try {
+    const j = await relay('/v1/kakao-mobility/directions', {origin: `${p.lng},${p.lat}`, destination: `${v.lng},${v.lat}`, priority: 'RECOMMEND'});
+    const rt = j.routes?.[0];
+    if (!rt || rt.result_code !== 0) { box.innerHTML = `<div class="drive">차 경로를 못 찾았습니다${rt?.result_msg ? ' — ' + esc(rt.result_msg) : ''}.</div>`; return; }
+    const s = rt.summary, min = Math.round(s.duration / 60);
+    box.innerHTML = `<div class="drive">🚗 내 위치 → ${esc(v.name)}<br>
+      거리 <b>${(s.distance / 1000).toFixed(1)}km</b> · 예상 <b>${min >= 60 ? Math.floor(min / 60) + '시간 ' + (min % 60) + '분' : min + '분'}</b><br>
+      통행료 ${(s.fare?.toll || 0).toLocaleString()}원 · 예상 택시요금 ${(s.fare?.taxi || 0).toLocaleString()}원
+      <div class="hint">지금 교통 기준 예상치(카카오모빌리티). 대중교통·도보는 아닙니다.</div></div>`;
+  } catch { box.innerHTML = '<div class="drive">경로를 계산하지 못했습니다. 잠시 뒤 다시 해 보세요.</div>'; }
+}
 
 /* ---------- 통계 ---------- */
 function bars(entries){
@@ -2948,7 +3197,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.17.3';
+const APP_VERSION = 'v1.18.0';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
