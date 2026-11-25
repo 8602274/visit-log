@@ -2290,6 +2290,11 @@ const EAT_GENRES = [   // [이름, 서버 업종값 | null, 업종 글자 거르
 const NEAR_CATS = [['FD6','🍽️ 음식점'],['CE7','☕ 카페'],['PK6','🅿️ 주차장'],['AT4','🏞️ 관광명소'],['CT1','🎭 문화시설'],['AD5','🏨 숙박'],
   ['CS2','🏪 편의점'],['PM9','💊 약국'],['HP8','🏥 병원'],['OL7','⛽ 주유소'],['SW8','🚇 지하철역'],['MT1','🛒 대형마트']];
 const NEAR_RAD = [300, 500, 1000, 2000];
+// 행정구역 API는 '부산광역시'처럼 긴 이름 — eat.pl 주소는 '부산 해운대구 …'
+const SIDO = {서울특별시:'서울',부산광역시:'부산',대구광역시:'대구',인천광역시:'인천',광주광역시:'광주',대전광역시:'대전',울산광역시:'울산',
+  세종특별자치시:'세종',경기도:'경기',강원특별자치도:'강원',강원도:'강원',충청북도:'충북',충청남도:'충남',전북특별자치도:'전북',전라북도:'전북',
+  전라남도:'전남',경상북도:'경북',경상남도:'경남',제주특별자치도:'제주'};
+const shortSido = s => SIDO[s] || s || '';
 let near = null;   // {lat,lng,label, addr:{r1,r2,road,dong,full}, mode, scope, genre, flags:Set, cat, rad, eat:{key:items}, rate:{}}
 
 async function openNear(pos){
@@ -2306,11 +2311,11 @@ async function openNear(pos){
   try {
     const j = await relay('/v1/kakao-map/coord2address', {x: pos.lng, y: pos.lat});
     const d = j.documents?.[0] || {}, ra = d.road_address, a = d.address;
-    near.addr = {r1: ra?.region_1depth_name || a?.region_1depth_name || '', r2: ra?.region_2depth_name || a?.region_2depth_name || '',
+    near.addr = {r1: shortSido(ra?.region_1depth_name || a?.region_1depth_name), r2: ra?.region_2depth_name || a?.region_2depth_name || '',
       road: ra?.road_name || '', dong: a?.region_3depth_name || ra?.region_3depth_name || '', full: ra?.address_name || a?.address_name || ''};
     if (!near.addr.r2) {   // 바닷가·산처럼 번지가 없는 자리 → 행정구역만이라도
       const g = (await relay('/v1/kakao-map/coord2region', {x: pos.lng, y: pos.lat})).documents?.find(x => x.region_type === 'B') || {};
-      Object.assign(near.addr, {r1: g.region_1depth_name || '', r2: g.region_2depth_name || '', dong: g.region_3depth_name || '', full: g.address_name || ''});
+      Object.assign(near.addr, {r1: shortSido(g.region_1depth_name), r2: g.region_2depth_name || '', dong: g.region_3depth_name || '', full: g.address_name || ''});
     }
   } catch (e) {
     $('#nsWhere').textContent = `📍 ${pos.label}`;
@@ -3207,7 +3212,7 @@ $('#btnPlanNow').addEventListener('click', async () => { $('#planInfo').textCont
 if (isPhone) $('#planPanel').style.display = 'none';
 
 /* ---------- 설치·오프라인 ---------- */
-const APP_VERSION = 'v1.18.1';
+const APP_VERSION = 'v1.18.2';
 const APP_URL = 'https://8602274.github.io/visit-log/';
 $('#btnShare').addEventListener('click', async () => {
   const text = '📍 그날그곳 앱\n다녀온 곳을 사진·별점·메모·위치와 함께 남기는 무료 앱이에요.\n👉 ' + APP_URL;
